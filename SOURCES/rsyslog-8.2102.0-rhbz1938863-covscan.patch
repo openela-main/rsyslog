@@ -1,0 +1,163 @@
+diff -up rsyslog-8.2102.0/contrib/imdocker/imdocker.c.covscan rsyslog-8.2102.0/contrib/imdocker/imdocker.c
+--- rsyslog-8.2102.0/contrib/imdocker/imdocker.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/contrib/imdocker/imdocker.c	2021-07-22 14:10:31.877231143 +0200
+@@ -1527,6 +1527,7 @@ process_json(sbool isInit, const char* j
+ 									pInstances->last_container_id,
+ 									(unsigned)pInstances->last_container_created);
+ 						}
++						// coverity[leaked_storage : FALSE]
+ 						CHKiRet(dockerContLogsInstSetUrlById(isInit, pInst,
+ 									pInstances->curlm, containerId));
+ 						CHKiRet(dockerContLogReqsAdd(pInstances, pInst));
+diff -up rsyslog-8.2102.0/contrib/omhiredis/omhiredis.c.covscan rsyslog-8.2102.0/contrib/omhiredis/omhiredis.c
+--- rsyslog-8.2102.0/contrib/omhiredis/omhiredis.c.covscan	2020-10-03 19:06:47.000000000 +0200
++++ rsyslog-8.2102.0/contrib/omhiredis/omhiredis.c	2021-07-22 14:10:31.877231143 +0200
+@@ -324,7 +324,6 @@ BEGINnewActInst
+ 	struct cnfparamvals *pvals;
+ 	int i;
+ 	int iNumTpls;
+-	uchar *keydup = NULL;
+ CODESTARTnewActInst
+ 	if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL)
+ 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+@@ -417,14 +416,11 @@ CODESTARTnewActInst
+ 	CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar*)pData->tplName, OMSR_NO_RQD_TPL_OPTS));
+ 
+ 	if (pData->dynaKey) {
+-		CHKmalloc(keydup = ustrdup(pData->key));
+ 		CHKiRet(OMSRsetEntry(*ppOMSR, 1, ustrdup(pData->key), OMSR_NO_RQD_TPL_OPTS));
+-		keydup = NULL; /* handed over */
+ 	}
+ 
+ CODE_STD_FINALIZERnewActInst
+ 	cnfparamvalsDestruct(pvals, &actpblk);
+-	free(keydup);
+ ENDnewActInst
+ 
+ 
+diff -up rsyslog-8.2102.0/contrib/omrabbitmq/omrabbitmq.c.covscan rsyslog-8.2102.0/contrib/omrabbitmq/omrabbitmq.c
+--- rsyslog-8.2102.0/contrib/omrabbitmq/omrabbitmq.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/contrib/omrabbitmq/omrabbitmq.c	2021-07-22 14:10:31.877231143 +0200
+@@ -778,6 +778,7 @@ static rsRetVal publishRabbitMQ(wrkrInst
+ 		ABORT_FINALIZE(RS_RET_RABBITMQ_CONN_ERR);
+ 	}
+ 
++	// coverity[identical_branches : FALSE]
+ 	if (manage_error(amqp_basic_publish(self->a_conn, 1, exchange, routing_key,
+ 			0, 0, p_amqp_props, body_bytes), "amqp_basic_publish")) {
+ 		/* error already notified */
+diff -up rsyslog-8.2102.0/grammar/rainerscript.c.covscan rsyslog-8.2102.0/grammar/rainerscript.c
+--- rsyslog-8.2102.0/grammar/rainerscript.c.covscan	2021-02-15 12:06:16.000000000 +0100
++++ rsyslog-8.2102.0/grammar/rainerscript.c	2021-07-22 14:10:31.878231140 +0200
+@@ -2814,7 +2814,7 @@ evalVar(struct cnfvar *__restrict__ cons
+ 		if(bMustBeFreed)
+ 			free(pszProp);
+ 	}
+-
++	// coverity[leaked_storage : FALSE]
+ }
+ 
+ /* perform a string comparision operation against a while array. Semantic is
+diff -up rsyslog-8.2102.0/plugins/imfile/imfile.c.covscan rsyslog-8.2102.0/plugins/imfile/imfile.c
+--- rsyslog-8.2102.0/plugins/imfile/imfile.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/plugins/imfile/imfile.c	2021-07-22 14:10:31.878231140 +0200
+@@ -1278,6 +1278,7 @@ static void ATTR_NONNULL(1)
+ getFileID(act_obj_t *const act)
+ {
+ 	char tmp_id[FILE_ID_HASH_SIZE];
++	// coverity[buffer_size_warning : FALSE]
+ 	strncpy(tmp_id, (const char*)act->file_id, FILE_ID_HASH_SIZE);
+ 	act->file_id[0] = '\0';
+ 	assert(act->fd >= 0); /* fd must have been opened at act_obj_t creation! */
+@@ -1290,6 +1291,7 @@ getFileID(act_obj_t *const act)
+ 		DBGPRINTF("getFileID partial or error read, ret %d\n", r);
+ 	}
+ 	if (strncmp(tmp_id, act->file_id, FILE_ID_HASH_SIZE)) {/* save the old id for cleaning purposes */
++		// coverity[buffer_size_warning : FALSE]
+ 		strncpy(act->file_id_prev, tmp_id, FILE_ID_HASH_SIZE);
+ 	}
+ 	DBGPRINTF("getFileID for '%s', file_id_hash '%s'\n", act->name, act->file_id);
+@@ -1544,6 +1546,7 @@ openFileWithoutStateFile(act_obj_t *cons
+ 		const int fd = open(act->name, O_RDONLY | O_CLOEXEC);
+ 		if(fd >= 0) {
+ 			act->pStrm->iCurrOffs = lseek64(fd, 0, SEEK_END);
++			close(fd);
+ 			if(act->pStrm->iCurrOffs < 0) {
+ 				act->pStrm->iCurrOffs = 0;
+ 				LogError(errno, RS_RET_ERR, "imfile: could not query current "
+diff -up rsyslog-8.2102.0/plugins/imptcp/imptcp.c.covscan rsyslog-8.2102.0/plugins/imptcp/imptcp.c
+--- rsyslog-8.2102.0/plugins/imptcp/imptcp.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/plugins/imptcp/imptcp.c	2021-07-22 14:10:31.878231140 +0200
+@@ -1920,6 +1920,7 @@ lstnActivity(ptcplstn_t *const pLstn)
+ 	}
+ 
+ finalize_it:
++	// coverity[leaked_handle : FALSE]
+ 	RETiRet;
+ }
+ 
+diff -up rsyslog-8.2102.0/plugins/mmjsonparse/mmjsonparse.c.covscan rsyslog-8.2102.0/plugins/mmjsonparse/mmjsonparse.c
+--- rsyslog-8.2102.0/plugins/mmjsonparse/mmjsonparse.c.covscan	2020-10-03 19:06:47.000000000 +0200
++++ rsyslog-8.2102.0/plugins/mmjsonparse/mmjsonparse.c	2021-07-22 14:10:31.879231138 +0200
+@@ -394,7 +394,7 @@ CODEmodInit_QueryRegCFSLineHdlr
+ 		ABORT_FINALIZE(RS_RET_NO_MSG_PASSING);
+ 	}
+ 
+-	
++	// coverity[identical_branches : FALSE]
+ 	CHKiRet(omsdRegCFSLineHdlr((uchar *)"resetconfigvariables", 1, eCmdHdlrCustomHandler,
+ 				    resetConfigVariables, NULL, STD_LOADABLE_MODULE_ID));
+ ENDmodInit
+diff -up rsyslog-8.2102.0/plugins/omclickhouse/omclickhouse.c.covscan rsyslog-8.2102.0/plugins/omclickhouse/omclickhouse.c
+--- rsyslog-8.2102.0/plugins/omclickhouse/omclickhouse.c.covscan	2020-10-03 19:06:47.000000000 +0200
++++ rsyslog-8.2102.0/plugins/omclickhouse/omclickhouse.c	2021-07-22 14:10:31.879231138 +0200
+@@ -368,6 +368,7 @@ writeDataError(wrkrInstanceData_t *const
+ 	}
+ 
+ finalize_it:
++	// coverity[leaked_storage : FALSE]
+ 	RETiRet;
+ }
+ 
+diff -up rsyslog-8.2102.0/runtime/nsd_gtls.c.covscan rsyslog-8.2102.0/runtime/nsd_gtls.c
+--- rsyslog-8.2102.0/runtime/nsd_gtls.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/runtime/nsd_gtls.c	2021-07-22 14:17:06.183174167 +0200
+@@ -227,7 +227,7 @@ gtlsLoadOurCertKey(nsd_gtls_t *pThis)
+ 	pThis->bOurKeyIsInit = 1;
+ 	CHKgnutls(gnutls_x509_privkey_import(pThis->ourKey, &data, GNUTLS_X509_FMT_PEM));
+ 	free(data.data);
+-
++	data.data = NULL;
+ 
+ finalize_it:
+ 	if(iRet == RS_RET_CERTLESS) {
+diff -up rsyslog-8.2102.0/runtime/nsd_ptcp.c.covscan rsyslog-8.2102.0/runtime/nsd_ptcp.c
+--- rsyslog-8.2102.0/runtime/nsd_ptcp.c.covscan	2021-02-15 08:20:04.000000000 +0100
++++ rsyslog-8.2102.0/runtime/nsd_ptcp.c	2021-07-22 14:10:31.879231138 +0200
+@@ -191,6 +191,7 @@ SetTlsVerifyDepth(nsd_t __attribute__((u
+ 	nsd_ptcp_t *pThis = (nsd_ptcp_t*) pNsd;
+ 	DEFiRet;
+ 	ISOBJ_TYPE_assert((pThis), nsd_ptcp);
++	// coverity[identical_branches : FALSE]
+ 	if (verifyDepth == 0) {
+ 		FINALIZE;
+ 	}
+diff -up rsyslog-8.2102.0/tools/rsyslogd.c.covscan rsyslog-8.2102.0/tools/rsyslogd.c
+--- rsyslog-8.2102.0/tools/rsyslogd.c.covscan	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/tools/rsyslogd.c	2021-07-22 14:10:31.879231138 +0200
+@@ -293,6 +293,7 @@ writePidFile(void)
+ 		free((void*)tmpPidFile);
+ 	}
+ finalize_it:
++	// coverity[leaked_storage : FALSE]
+ 	RETiRet;
+ }
+ 
+@@ -1026,6 +1027,7 @@ splitOversizeMessage(smsg_t *const pMsg)
+ 	/* if necessary, write partial last segment */
+ 	if(len_last_segment != 0) {
+ 		CHKmalloc(pMsg_seg = MsgDup(pMsg));
++		// coverity[copy_paste_error : FALSE]
+ 		MsgSetRawMsg(pMsg_seg, rawmsg + (nsegments * maxlen), len_last_segment);
+ 		submitMsg2(pMsg_seg);
+ 	}

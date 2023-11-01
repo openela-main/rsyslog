@@ -1,0 +1,51 @@
+--- a/source/configuration/actions.rst	2020-01-13 09:35:54.000000000 +0100
++++ b/source/configuration/actions.rst	2022-03-09 10:46:23.945881936 +0100
+@@ -90,6 +90,12 @@
+    provided to the action in question, the action name as well as
+    the rsyslog status code roughly explaining why it failed.
+ 
++-  **action.errorfile.maxsize** integer
++
++   In some cases, error file needs to be limited in size.
++   This option allows specifying a maximum size, in bytes, for the error file.
++   When error file reaches that size, no more errors are written to it.
++
+ -  **action.execOnlyOnceEveryInterval** integer
+ 
+    Execute action only if the last execute is at last seconds in the
+--- a/build/_sources/configuration/actions.rst.txt	2020-01-13 09:35:54.000000000 +0100
++++ b/build/_sources/configuration/actions.rst.txt	2022-03-09 11:17:44.391213038 +0100
+@@ -90,6 +90,12 @@
+    provided to the action in question, the action name as well as
+    the rsyslog status code roughly explaining why it failed.
+ 
++-  **action.errorfile.maxsize** integer
++
++   In some cases, error file needs to be limited in size.
++   This option allows specifying a maximum size, in bytes, for the error file.
++   When error file reaches that size, no more errors are written to it.
++
+ -  **action.execOnlyOnceEveryInterval** integer
+ 
+    Execute action only if the last execute is at last seconds in the
+--- a/build/configuration/actions.html	2021-02-15 12:53:30.000000000 +0100
++++ b/build/configuration/actions.html	2022-03-09 11:27:04.035799702 +0100
+@@ -122,6 +122,11 @@
+ provided to the action in question, the action name as well as
+ the rsyslog status code roughly explaining why it failed.</p>
+ </li>
++<li><p class="first"><strong>action.errorfile.maxsize</strong> integer</p>
++<p>In some cases, error file needs to be limited in size.
++This option allows specifying a maximum size, in bytes, for the error file.
++When error file reaches that size, no more errors are written to it.</p>
++</li>
+ <li><p class="first"><strong>action.execOnlyOnceEveryInterval</strong> integer</p>
+ <p>Execute action only if the last execute is at last seconds in the
+ past (more info in ommail, but may be used with any action)</p>
+@@ -672,4 +677,4 @@
+     <div class="footer" role="contentinfo">
+     </div>
+   </body>
+-</html>
+\ No newline at end of file
++</html>

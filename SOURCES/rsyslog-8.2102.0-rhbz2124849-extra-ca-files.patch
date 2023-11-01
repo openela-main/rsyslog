@@ -1,0 +1,682 @@
+--- rsyslog-8.2102.0.ori/runtime/glbl.h	2020-10-03 19:06:47.000000000 +0200
++++ rsyslog-8.2102.0/runtime/glbl.h	2022-09-06 11:13:31.538674778 +0200
+@@ -72,6 +72,7 @@
+ 	SIMP_PROP(DfltNetstrmDrvrCAF, uchar*)
+ 	SIMP_PROP(DfltNetstrmDrvrKeyFile, uchar*)
+ 	SIMP_PROP(DfltNetstrmDrvrCertFile, uchar*)
++	SIMP_PROP(NetstrmDrvrCAExtraFiles, uchar*)
+ 	SIMP_PROP(ParserControlCharacterEscapePrefix, uchar)
+ 	SIMP_PROP(ParserDropTrailingLFOnReception, int)
+ 	SIMP_PROP(ParserEscapeControlCharactersOnReceive, int)
+--- rsyslog-8.2102.0.ori/runtime/glbl.c	2022-09-06 10:37:26.440149338 +0200
++++ rsyslog-8.2102.0/runtime/glbl.c	2022-09-06 11:12:06.198378210 +0200
+@@ -122,6 +122,7 @@
+ static uchar *pszDfltNetstrmDrvrCAF = NULL; /* default CA file for the netstrm driver */
+ static uchar *pszDfltNetstrmDrvrKeyFile = NULL; /* default key file for the netstrm driver (server) */
+ static uchar *pszDfltNetstrmDrvrCertFile = NULL; /* default cert file for the netstrm driver (server) */
++static uchar *pszNetstrmDrvrCAExtraFiles = NULL; /* list of additional CAExtraFiles */
+ int bTerminateInputs = 0;		/* global switch that inputs shall terminate ASAP (1=> terminate) */
+ static uchar cCCEscapeChar = '#'; /* character to be used to start an escape sequence for control chars */
+ static int bDropTrailingLF = 1; /* drop trailing LF's on reception? */
+@@ -176,6 +177,7 @@
+ 	{ "defaultnetstreamdriverkeyfile", eCmdHdlrString, 0 },
+ 	{ "defaultnetstreamdrivercertfile", eCmdHdlrString, 0 },
+ 	{ "defaultnetstreamdriver", eCmdHdlrString, 0 },
++	{ "netstreamdrivercaextrafiles", eCmdHdlrString, 0 },
+ 	{ "maxmessagesize", eCmdHdlrSize, 0 },
+ 	{ "oversizemsg.errorfile", eCmdHdlrGetWord, 0 },
+ 	{ "oversizemsg.report", eCmdHdlrBinary, 0 },
+@@ -307,6 +309,8 @@
+ /* TODO: use custom function which frees existing value */
+ SIMP_PROP_SET(DfltNetstrmDrvrCertFile, pszDfltNetstrmDrvrCertFile, uchar*)
+ /* TODO: use custom function which frees existing value */
++SIMP_PROP_SET(NetstrmDrvrCAExtraFiles, pszNetstrmDrvrCAExtraFiles, uchar*)
++/* TODO: use custom function which frees existing value */
+ 
+ #undef SIMP_PROP
+ #undef SIMP_PROP_SET
+@@ -830,6 +834,13 @@
+ 	return(pszDfltNetstrmDrvr == NULL ? DFLT_NETSTRM_DRVR : pszDfltNetstrmDrvr);
+ }
+ 
++/* return the additional ca extra files */
++static uchar*
++GetNetstrmDrvrCAExtraFiles(void)
++{
++	return(pszNetstrmDrvrCAExtraFiles);
++}
++
+ 
+ /* return the current default netstream driver CA File */
+ static uchar*
+@@ -925,6 +936,7 @@
+ 	SIMP_PROP(DfltNetstrmDrvrCAF)
+ 	SIMP_PROP(DfltNetstrmDrvrKeyFile)
+ 	SIMP_PROP(DfltNetstrmDrvrCertFile)
++	SIMP_PROP(NetstrmDrvrCAExtraFiles)
+ #ifdef USE_UNLIMITED_SELECT
+ 	SIMP_PROP(FdSetSize)
+ #endif
+@@ -945,6 +957,8 @@
+ 	pszDfltNetstrmDrvrKeyFile = NULL;
+ 	free(pszDfltNetstrmDrvrCertFile);
+ 	pszDfltNetstrmDrvrCertFile = NULL;
++	free(pszNetstrmDrvrCAExtraFiles);
++	pszNetstrmDrvrCAExtraFiles = NULL;
+ 	free(LocalHostNameOverride);
+ 	LocalHostNameOverride = NULL;
+ 	free(oversizeMsgErrorFile);
+@@ -1350,6 +1364,9 @@
+ 			free(pszDfltNetstrmDrvr);
+ 			pszDfltNetstrmDrvr = (uchar*)
+ 				es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
++		} else if(!strcmp(paramblk.descr[i].name, "netstreamdrivercaextrafiles")) {
++			free(pszNetstrmDrvrCAExtraFiles);
++			pszNetstrmDrvrCAExtraFiles = (uchar*) es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+ 		} else if(!strcmp(paramblk.descr[i].name, "preservefqdn")) {
+ 			bPreserveFQDN = (int) cnfparamvals[i].val.d.n;
+ 		} else if(!strcmp(paramblk.descr[i].name,
+@@ -1546,6 +1563,8 @@
+ 	&pszDfltNetstrmDrvrKeyFile, NULL));
+ 	CHKiRet(regCfSysLineHdlr((uchar *)"defaultnetstreamdrivercertfile", 0, eCmdHdlrGetWord, NULL,
+ 	&pszDfltNetstrmDrvrCertFile, NULL));
++	CHKiRet(regCfSysLineHdlr((uchar *)"netstreamdrivercaextrafiles", 0, eCmdHdlrGetWord, NULL,
++	&pszNetstrmDrvrCAExtraFiles, NULL));
+ 	CHKiRet(regCfSysLineHdlr((uchar *)"localhostname", 0, eCmdHdlrGetWord, NULL, &LocalHostNameOverride, NULL));
+ 	CHKiRet(regCfSysLineHdlr((uchar *)"localhostipif", 0, eCmdHdlrGetWord, setLocalHostIPIF, NULL, NULL));
+ 	CHKiRet(regCfSysLineHdlr((uchar *)"optimizeforuniprocessor", 0, eCmdHdlrGoneAway, NULL, NULL, NULL));
+@@ -1579,6 +1598,7 @@
+ 	free(pszDfltNetstrmDrvrCAF);
+ 	free(pszDfltNetstrmDrvrKeyFile);
+ 	free(pszDfltNetstrmDrvrCertFile);
++	free(pszNetstrmDrvrCAExtraFiles);
+ 	free(pszWorkDir);
+ 	free(LocalDomain);
+ 	free(LocalHostName);
+--- rsyslog-8.2102.0.ori/runtime/nsd_ossl.c	2021-01-18 11:21:14.000000000 +0100
++++ rsyslog-8.2102.0/runtime/nsd_ossl.c	2022-09-06 11:25:18.144130340 +0200
+@@ -88,6 +88,7 @@
+ static short bHaveCA;
+ static short bHaveCert;
+ static short bHaveKey;
++static short bHaveExtraCAFiles;
+ static int bAnonInit;
+ static MUTEX_TYPE anonInit_mut = PTHREAD_MUTEX_INITIALIZER;
+ 
+@@ -413,7 +414,8 @@
+ {
+ 	DEFiRet;
+ 	DBGPRINTF("openssl: entering osslGlblInit\n");
+-	const char *caFile, *certFile, *keyFile;
++	const char *caFile, *certFile, *keyFile, *extraCaFile;
++	char *extraCaFiles;
+ 
+ 	/* Setup OpenSSL library */
+ 	if((opensslh_THREAD_setup() == 0) || !SSL_library_init()) {
+@@ -450,9 +452,27 @@
+ 	} else {
+ 		bHaveKey = 1;
+ 	}
++	extraCaFiles = (char*) glbl.GetNetstrmDrvrCAExtraFiles();
++	if(extraCaFiles == NULL) {
++	        bHaveExtraCAFiles = 0;
++	} else {
++	        bHaveExtraCAFiles = 1;
++	}
+ 
+ 	/* Create main CTX Object */
+ 	ctx = SSL_CTX_new(SSLv23_method());
++	if(bHaveExtraCAFiles == 1) {
++		while((extraCaFile = strsep(&extraCaFiles, ","))) {
++			if(SSL_CTX_load_verify_locations(ctx, extraCaFile, NULL) != 1) {
++				LogError(0, RS_RET_TLS_CERT_ERR, "Error: Extra Certificate file could not be accessed. "
++					"Check at least: 1) file path is correct, 2) file exist, "
++					"3) permissions are correct, 4) file content is correct. "
++					"Open ssl error info may follow in next messages");
++				osslLastSSLErrorMsg(0, NULL, LOG_ERR, "osslGlblInit");
++				ABORT_FINALIZE(RS_RET_TLS_CERT_ERR);
++			}
++ 		}
++	}
+ 	if(bHaveCA == 1 && SSL_CTX_load_verify_locations(ctx, caFile, NULL) != 1) {
+ 		LogError(0, RS_RET_TLS_CERT_ERR, "Error: CA certificate could not be accessed. "
+ 				"Check at least: 1) file path is correct, 2) file exist, "
+@@ -476,7 +496,7 @@
+ 				"Open ssl error info may follow in next messages");
+ 		osslLastSSLErrorMsg(0, NULL, LOG_ERR, "osslGlblInit");
+ 		ABORT_FINALIZE(RS_RET_TLS_KEY_ERR);
+-	}
++	}	
+ 
+ 	/* Set CTX Options */
+ 	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);		/* Disable insecure SSLv2 Protocol */
+--- rsyslog-8.2102.0.ori/tests/Makefile.am	2022-09-06 10:37:26.447149363 +0200
++++ rsyslog-8.2102.0/tests/Makefile.am	2022-09-06 12:05:55.443600359 +0200
+@@ -1247,7 +1247,8 @@
+ 	sndrcv_tls_ossl_servercert_gtls_clientanon.sh \
+ 	sndrcv_tls_ossl_serveranon_gtls_clientanon.sh \
+ 	sndrcv_tls_gtls_servercert_ossl_clientanon.sh \
+-	sndrcv_tls_gtls_serveranon_ossl_clientanon.sh
++	sndrcv_tls_gtls_serveranon_ossl_clientanon.sh \
++	sndrcv_ossl_cert_chain.sh
+ endif
+ endif
+ 
+@@ -2575,6 +2576,7 @@
+ 	sndrcv_tls_ossl_serveranon_gtls_clientanon.sh \
+ 	sndrcv_tls_gtls_servercert_ossl_clientanon.sh \
+ 	sndrcv_tls_gtls_serveranon_ossl_clientanon.sh \
++	sndrcv_ossl_cert_chain.sh \
+ 	omtcl.sh \
+ 	omtcl.tcl \
+ 	pmsnare-default.sh \
+--- rsyslog-8.2102.0.ori/tests/sndrcv_ossl_cert_chain.sh	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/sndrcv_ossl_cert_chain.sh	2022-09-06 10:48:41.512496691 +0200
+@@ -0,0 +1,76 @@
++#!/bin/bash
++# alorbach, 2019-01-16
++# This file is part of the rsyslog project, released  under ASL 2.0
++. ${srcdir:=.}/diag.sh init
++export NUMMESSAGES=1000
++# uncomment for debugging support:
++#export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
++export RSYSLOG_DEBUGLOG="log"
++generate_conf
++export PORT_RCVR="$(get_free_port)"
++### This is important, as it must be exactly the same
++### as the ones configured in used certificates
++export HOSTNAME="fedora"
++add_conf '
++global(
++    DefaultNetstreamDriver="ossl"
++    DefaultNetstreamDriverCAFile="'$srcdir/testsuites/certchain/ca-cert.pem'"
++    DefaultNetstreamDriverCertFile="'$srcdir/testsuites/certchain/server-cert.pem'"
++    DefaultNetstreamDriverKeyFile="'$srcdir/testsuites/certchain/server-key.pem'"
++    NetstreamDriverCAExtraFiles="'$srcdir/testsuites/certchain/ca-root-cert.pem'"
++)
++
++module(	load="../plugins/imtcp/.libs/imtcp"
++	StreamDriver.Name="ossl"
++	StreamDriver.Mode="1"
++        PermittedPeer="'$HOSTNAME'"
++	StreamDriver.AuthMode="x509/name" )
++# then SENDER sends to this port (not tcpflood!)
++input(	type="imtcp" port="'$PORT_RCVR'" )
++
++$template outfmt,"%msg:F,58:2%\n"
++$template dynfile,"'$RSYSLOG_OUT_LOG'" # trick to use relative path names!
++:msg, contains, "msgnum:" ?dynfile;outfmt
++'
++startup
++export RSYSLOG_DEBUGLOG="log2"
++#valgrind="valgrind"
++generate_conf 2
++export TCPFLOOD_PORT="$(get_free_port)"
++add_conf '
++global(
++	defaultNetstreamDriverCAFile="'$srcdir/testsuites/certchain/ca-root-cert.pem'"
++	defaultNetstreamDriverCertFile="'$srcdir/testsuites/certchain/client-cert.pem'"
++	defaultNetstreamDriverKeyFile="'$srcdir/testsuites/certchain/client-key.pem'"
++)
++
++# Note: no TLS for the listener, this is for tcpflood!
++$ModLoad ../plugins/imtcp/.libs/imtcp
++input(	type="imtcp" port="0" listenPortFileName="'$RSYSLOG_DYNNAME'.tcpflood_port" )
++
++# set up the action
++action(	type="omfwd"
++	protocol="tcp"
++	target="127.0.0.1"
++	port="'$PORT_RCVR'"
++	StreamDriver="ossl"
++	StreamDriverMode="1"
++	StreamDriverAuthMode="x509/name"
++        StreamDriverPermittedPeers="'$HOSTNAME'"
++	)
++' 2
++startup 2
++
++# now inject the messages into instance 2. It will connect to instance 1,
++# and that instance will record the data.
++tcpflood -m$NUMMESSAGES -i1
++wait_file_lines
++# shut down sender when everything is sent, receiver continues to run concurrently
++shutdown_when_empty 2
++wait_shutdown 2
++# now it is time to stop the receiver as well
++shutdown_when_empty
++wait_shutdown
++
++seq_check 1 $NUMMESSAGES
++exit_test
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/ca-cert.pem rsyslog-8.2102.0/tests/testsuites/certchain/ca-cert.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/ca-cert.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/ca-cert.pem	2022-09-06 10:48:41.513496694 +0200
+@@ -0,0 +1,29 @@
++-----BEGIN CERTIFICATE-----
++MIIFBzCCA2+gAwIBAgIBATANBgkqhkiG9w0BAQsFADBtMQswCQYDVQQGEwJDWjEQ
++MA4GA1UECBMHTW9yYXZpYTENMAsGA1UEBxMEQnJubzEQMA4GA1UEChMHUmVkIEhh
++dDEMMAoGA1UECxMDR1NTMR0wGwYDVQQDExRyc3lzbG9nK2NoYWluK2Nhcm9vdDAe
++Fw0yMjA2MDYxMzQwNDlaFw0yMzA2MDYxMzQwNDlaMGkxCzAJBgNVBAYTAkNaMRAw
++DgYDVQQIEwdNb3JhdmlhMQ0wCwYDVQQHEwRCcm5vMRAwDgYDVQQKEwdSZWQgSGF0
++MQwwCgYDVQQLEwNHU1MxGTAXBgNVBAMTEHJzeXNsb2crY2hhaW4rY2EwggGiMA0G
++CSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQD6yDdc9T3oddk5smOhF8OkRXwb2nvC
++M4RPPiuiACvbVoc3UdW2e4NI77J75JzNQL3gQUpgxGcvWiQt3R67ecYgIWiq0zpi
++MrcU3S0dboK10A6NXtcVc4RgwUPf0c8toM975c/6q2XT9Q0SbcI7HKXdzTXQZJDz
++sqQ3UjJuoCLSl6Dd8M0HXJnd2HlF1h5JeIp5vGrCJzQ5SyO6b4jVODtx/uXBohGn
++2x8NdB7wO5NecDyryrwv+FsUXWS4NNmj917bBuXSx3SmW/G7e8AFvcHN8VG6AxH7
++nap+EWGQia+LNG489flgU3U7Ec8zpTrI1wU6bUi6lK/RPxU0ViCaceGjXfoNofIc
++gGJOSS0LaHjM+c4OhmKWrIJ59j2L/rlIvmfqRO3qgThF4eaOfQTbixe/oiy3gR85
+++X6YDXvBwTGZDD6OeG1fCzx/snQLiP3/dRv6LJFE8Krawc9OCOWRDRlIxubrkmYz
++LVBxcFgI4BBGNYVsaMSYrkCVaS2Rv1sNAi0CAwEAAaOBtTCBsjAPBgNVHRMBAf8E
++BTADAQH/MCQGA1UdEQQdMBuCBmZlZG9yYYcEfwAAAYELcm9vdEBmZWRvcmEwDgYD
++VR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQ7t+ub2L0VzaTLfpubh4rnDk2RmjAfBgNV
++HSMEGDAWgBSv9FgWjwDV6oGLewYzCo2/AdWTmzApBgNVHR8EIjAgMB6gHKAahhho
++dHRwOi8vMTI3LjAuMC4xL2dldGNybC8wDQYJKoZIhvcNAQELBQADggGBADrv9nld
++FjKZCIVQCVxYc1/KFFnKo2KRCqvSdfb235Kx+5tSFWUsOfkSGjfLrv2+IFKSirFQ
++uFSac/qOrMo/W/4A+ypahG9Sx9PRD626/myr8exee2ygkcuGOuXvX3HkcpzNCmId
++ZS5ygtscFq3NdntwBJHe2ANOSJKIIBzC+gzn4r/V6PdxPEjiUrFs515/RBByi63r
++wWPeqvbaectyZyFIS0XN3LAjVb+zu0NQJqBpUGJlRBI1bRbPECu94LB8Huk/jgSJ
++OyFUKrnNeqaGqKnRfHxJxT/LjeTkQ/5cCOQTuE9IPbRvTykUzUQ3PrltwNqzAb44
++9Trqvqg+qGTfNuI7EZAO26zXbltYVZ+BmlULjKors49Ozq5l1JIevvq66etrE9oT
++DsII88MSIWn8bqaXETfKdIWtWu7Os7tmBTnfDQWGpNDJ3UwDpkyQPYJZJuSfELX0
++jpuWuE/1SbLxTx8eAe83z4yM3C21Kg5K2eJ0udagjM8xPdqYI8tF/4bNbA==
++-----END CERTIFICATE-----
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/ca-root-cert.pem rsyslog-8.2102.0/tests/testsuites/certchain/ca-root-cert.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/ca-root-cert.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/ca-root-cert.pem	2022-09-06 10:48:41.513496694 +0200
+@@ -0,0 +1,29 @@
++-----BEGIN CERTIFICATE-----
++MIIE6jCCA1KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBtMQswCQYDVQQGEwJDWjEQ
++MA4GA1UECBMHTW9yYXZpYTENMAsGA1UEBxMEQnJubzEQMA4GA1UEChMHUmVkIEhh
++dDEMMAoGA1UECxMDR1NTMR0wGwYDVQQDExRyc3lzbG9nK2NoYWluK2Nhcm9vdDAe
++Fw0yMjA2MDYxMzQwNDlaFw0yMzA2MDYxMzQwNDlaMG0xCzAJBgNVBAYTAkNaMRAw
++DgYDVQQIEwdNb3JhdmlhMQ0wCwYDVQQHEwRCcm5vMRAwDgYDVQQKEwdSZWQgSGF0
++MQwwCgYDVQQLEwNHU1MxHTAbBgNVBAMTFHJzeXNsb2crY2hhaW4rY2Fyb290MIIB
++ojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAuqAAv1OIGwQqCi1Mflrq8Buo
++G3UtiD8cMEovjzndFV4Ww5fm+R2vCv+tHq6a85mLL0wdqXh+/bAyDzxaULheXZel
++rGPuUFEH2BpOwKXBd31Vx1x32aN9iaoaND/JVQSp+9PeP9zyKeZIN2vFSyNK7LCA
++hdDXVoYeTktXMbm0vB2vMKk+5Vzc7WfyMfrdDvciuULzLU1RzRS2/RkHNlve5iVQ
++XbNN6CpVtXb0K/kcp4SQIVbNTD/g6Z3JnewSWwqjM9/axTC17rpqhsxaWk712Zjo
++lYeuWKfaF9eRXU951u/vrXMMRkDZe0cq5OiTbc1uUQag7uXkbUtEk5HDSihUWwxz
++MegUdUBXFN6EJ7OauWFOeyVJbbvPRa3q9fdlLILvv5/9SiMim6avcj6DlyUz2RhC
++YPh/gJHItuIbZ6hEU+aKqiDYMTHyibRoqOMZgsc8Vo1JAHQTI6gA8JQtGtjEbzIR
++GFkQkj4tvAQQgl5fs9nuweH9GoIaBl1IoIVZyR9PAgMBAAGjgZQwgZEwDwYDVR0T
++AQH/BAUwAwEB/zAkBgNVHREEHTAbggZmZWRvcmGHBH8AAAGBC3Jvb3RAZmVkb3Jh
++MA4GA1UdDwEB/wQEAwIBBjAdBgNVHQ4EFgQUr/RYFo8A1eqBi3sGMwqNvwHVk5sw
++KQYDVR0fBCIwIDAeoBygGoYYaHR0cDovLzEyNy4wLjAuMS9nZXRjcmwvMA0GCSqG
++SIb3DQEBCwUAA4IBgQBn/NZeqYon25QY1RmjYkCQ0B+uXsquGURETP30hQ+ltbbG
++u4jP+ll+oYkGVt1+eBi8Qw+rf8Qk3Q/+jmCoGS9vVjQc97r3YJxnFb3zB4HDCWdZ
++qXK7GeBlFA4XAtJO0ya8HCx4znuXKiNwqrJJHyyW2gvkY9raRkKOzj3/9jQXgAw4
++1d8NR9SxjKA2PnCSWNdVQOAm4us2tJXJexvbRx+b9Yu8LgUX/AdT4zqkIV8n6oFV
++XNaGyOsDN/+4JEsKbBixL+g3Y6yQHrwKMYq/Gh1WF33u2yYCzMU4Lw9AoYRG0jHi
++iAFchiwneGdC7E+To+qNdH5QJY38ZI7kWg3ADcXzwhTmvVUz5DNub9raE6yZZ4uf
++CyTGAJjH9USuhwH3unmB0kDjEOExIJHm+9uNA8S/81cwoCl2pz/hzr2fQwR2YLSa
++ox9p6cnQmnkL2j2QXhTvjDIswJmxuR43yqDIZUlx6cq1pTSJeN+8WcB2iK61p4DH
++JhH8af3aLUI5FNNgjas=
++-----END CERTIFICATE-----
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/client-cert.pem rsyslog-8.2102.0/tests/testsuites/certchain/client-cert.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/client-cert.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/client-cert.pem	2022-09-06 10:48:41.513496694 +0200
+@@ -0,0 +1,26 @@
++-----BEGIN CERTIFICATE-----
++MIIEXjCCAsagAwIBAgIBAjANBgkqhkiG9w0BAQsFADBpMQswCQYDVQQGEwJDWjEQ
++MA4GA1UECBMHTW9yYXZpYTENMAsGA1UEBxMEQnJubzEQMA4GA1UEChMHUmVkIEhh
++dDEMMAoGA1UECxMDR1NTMRkwFwYDVQQDExByc3lzbG9nK2NoYWluK2NhMB4XDTIy
++MDYwNjEzNDA0OVoXDTIzMDYwNjEzNDA0OVowbTELMAkGA1UEBhMCQ1oxEDAOBgNV
++BAgTB01vcmF2aWExDTALBgNVBAcTBEJybm8xEDAOBgNVBAoTB1JlZCBIYXQxDDAK
++BgNVBAsTA0dTUzEdMBsGA1UEAxMUcnN5c2xvZytjaGFpbitjbGllbnQwggEiMA0G
++CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDSIbnL1ViRk9CAPerSirUpBtnR4qYD
++XzPSkVJzX5PKLJkeJ6z6oIPoioh59+70ipL5K4ETkmbUFaKP+Lrk7l53BvAnP8Ba
++1rWNV2gzgyiihGCs7N/iamh9Rzj5lQCvzUJhiTcphcptV+0IIf9rbEggEazbSg1A
++BHxS8EBUx+ddVJc6MAlEbA/sstkqfE14k8YZPZlU9ZmLjyHbsQbfXFegYee6WMP0
++M7CqrMZ0ZWvDRWgqWOE+b8agmIKPb2VxJXuR3iXBJk8ANcrRzn/tXShMuGK5KiWL
++a6mFrzR6w55DgjIAKkmPO43jMO/qbWB91RVys/ztK7qIoXm3yadOeIU1AgMBAAGj
++gYwwgYkwDAYDVR0TAQH/BAIwADATBgNVHSUEDDAKBggrBgEFBQcDAjAkBgNVHREE
++HTAbggZmZWRvcmGHBH8AAAGBC3Jvb3RAZmVkb3JhMB0GA1UdDgQWBBSoW3Alxk4+
++6Uwv80/UE5C5rT4e6TAfBgNVHSMEGDAWgBQ7t+ub2L0VzaTLfpubh4rnDk2RmjAN
++BgkqhkiG9w0BAQsFAAOCAYEA5Nbnwixitghw9Zg3DANXFXiOsQBx7KEup7+x7edw
++n9r2raqNJEjT2Fv+ClEA3CIdPF+4wjoolOPezrNJxKO3UpYCQeO4ZU/QVl8BX8NB
++4v1rUqXsvhE//4FcLvMM+6n8Nrtt1VRhks8N0b0p/md9dFKGucd4otPZm0sbOrsg
++nrhDYzZiFAzJg3zFwOOHzxP6iKj2mfq+2XRiKl7SlbnEj/8l21Ne1V+mDV5++AEZ
++N/quuf8zYHwwuc3Y8K84doow9yBpFqrpBbazb8586utrAbTbytCqskzImFIjo5Oa
++1ujWArMDsVGGr+NzFWwCTz8VTNNJ5H1cBin0gT41/OwUQv8DIJqzmSFTg9Uqmb2V
++ZwjIvMGE4Tz8phzD0IbSXYmQsSeku4olIDM1d+vLvBlipGAeInmA+nZmeZwdD04c
++poqUj+H3mj1r6WOlk2ivV0TUZKO/JHydkBVf2EQJlEmGuSq/7S889fx3GT7jGcOb
++gl5LlIaraMgA48dK8gJUWtJh
++-----END CERTIFICATE-----
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/client-key.pem rsyslog-8.2102.0/tests/testsuites/certchain/client-key.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/client-key.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/client-key.pem	2022-09-06 12:10:13.808498227 +0200
+@@ -0,0 +1,134 @@
++Public Key Info:
++	Public Key Algorithm: RSA
++	Key Security Level: Medium (2048 bits)
++
++modulus:
++	00:d2:21:b9:cb:d5:58:91:93:d0:80:3d:ea:d2:8a:b5
++	29:06:d9:d1:e2:a6:03:5f:33:d2:91:52:73:5f:93:ca
++	2c:99:1e:27:ac:fa:a0:83:e8:8a:88:79:f7:ee:f4:8a
++	92:f9:2b:81:13:92:66:d4:15:a2:8f:f8:ba:e4:ee:5e
++	77:06:f0:27:3f:c0:5a:d6:b5:8d:57:68:33:83:28:a2
++	84:60:ac:ec:df:e2:6a:68:7d:47:38:f9:95:00:af:cd
++	42:61:89:37:29:85:ca:6d:57:ed:08:21:ff:6b:6c:48
++	20:11:ac:db:4a:0d:40:04:7c:52:f0:40:54:c7:e7:5d
++	54:97:3a:30:09:44:6c:0f:ec:b2:d9:2a:7c:4d:78:93
++	c6:19:3d:99:54:f5:99:8b:8f:21:db:b1:06:df:5c:57
++	a0:61:e7:ba:58:c3:f4:33:b0:aa:ac:c6:74:65:6b:c3
++	45:68:2a:58:e1:3e:6f:c6:a0:98:82:8f:6f:65:71:25
++	7b:91:de:25:c1:26:4f:00:35:ca:d1:ce:7f:ed:5d:28
++	4c:b8:62:b9:2a:25:8b:6b:a9:85:af:34:7a:c3:9e:43
++	82:32:00:2a:49:8f:3b:8d:e3:30:ef:ea:6d:60:7d:d5
++	15:72:b3:fc:ed:2b:ba:88:a1:79:b7:c9:a7:4e:78:85
++	35:
++
++public exponent:
++	01:00:01:
++
++private exponent:
++	1f:0c:c4:bb:8d:e6:ec:7b:ff:0f:34:17:02:cd:64:3f
++	8f:b7:97:ff:f9:af:fd:dd:56:7c:0a:c6:e9:94:99:07
++	46:08:e2:ab:f8:cc:c7:31:11:67:61:3e:75:9c:c4:ed
++	3a:cc:66:e2:51:7b:c8:52:fa:16:74:16:89:c5:7f:47
++	ef:4a:85:42:32:56:39:eb:d1:da:dc:96:e0:06:9d:1d
++	1a:7b:f2:f4:92:2c:4f:0c:53:fd:e3:43:55:3a:a5:05
++	ee:0b:ac:8f:02:2a:0b:46:36:cc:40:d9:d1:31:ca:e6
++	92:36:0c:a1:40:9b:f9:0d:b5:e3:b2:5d:d4:bc:27:5a
++	17:fd:3f:bd:8e:44:55:f2:e3:96:ac:cc:11:be:65:01
++	55:98:92:92:ac:59:46:fd:e2:11:80:eb:18:56:6a:82
++	3c:79:ec:30:b7:06:9b:97:55:74:36:17:7e:d8:c6:95
++	4e:a5:e1:55:5a:2a:d6:5d:cc:86:39:88:82:ba:31:19
++	98:d7:26:28:09:fe:b4:38:fe:1b:43:19:19:4f:ae:f2
++	27:18:d6:07:9a:c2:1c:66:2d:5a:e6:22:2e:ca:71:26
++	dc:76:8f:2e:f3:84:e3:61:5f:77:d3:63:8a:d0:6b:42
++	2a:6f:1b:98:91:b9:82:8d:d4:c4:f3:92:98:b4:a4:f1
++
++
++prime1:
++	00:e1:f4:19:35:e3:e2:e7:14:a6:56:8b:45:f9:2b:19
++	bb:13:b3:66:73:44:5d:ca:69:cb:73:d9:78:5a:0f:fd
++	de:ba:74:b3:53:70:a9:ab:52:22:34:78:a2:26:4a:aa
++	8f:1b:65:c1:3e:df:65:8c:9b:9a:70:04:ae:70:f6:ea
++	c4:e5:20:fa:16:e0:4f:56:f4:7b:d1:14:cc:94:e1:3c
++	58:02:82:98:20:cd:13:cf:a2:49:13:7a:88:c1:84:72
++	97:4f:1b:e8:d5:cb:6d:43:dd:d2:b8:09:dd:4f:ee:ce
++	03:0b:c4:c2:9b:cf:3d:a0:a3:57:fd:1c:c9:eb:af:ae
++	67:
++
++prime2:
++	00:ee:13:05:f0:4c:13:e2:f8:27:53:c4:ad:89:d9:31
++	b9:1b:e8:17:b9:db:36:cd:54:0c:15:eb:50:85:e4:8b
++	03:c4:f2:6d:a0:41:dc:99:21:7e:1e:8a:a1:5e:86:fe
++	53:d2:72:53:73:8a:7e:a2:43:83:d5:af:b0:e0:1a:89
++	b5:3f:b3:26:d2:8e:92:0d:ed:d1:29:ee:c5:f1:ff:fc
++	67:2c:a6:5d:4c:27:40:8a:5c:a1:23:d4:3f:11:bb:eb
++	51:84:be:83:ec:73:3c:2e:ff:43:f6:74:16:b8:95:36
++	2a:0b:1e:04:81:04:08:7a:40:21:dd:fb:dd:97:0a:76
++	03:
++
++coefficient:
++	00:a0:4c:15:4b:85:2f:81:6b:2e:e7:68:31:84:84:09
++	c4:45:55:01:da:3d:25:9d:37:67:ab:19:0b:1f:d3:9f
++	fc:09:12:31:66:5a:93:d8:d9:f2:00:c7:f7:03:0d:2b
++	9d:2d:b8:38:d0:82:de:03:e7:21:03:29:4f:2a:2b:b5
++	70:a3:bc:5b:bd:0e:f1:8b:bc:22:58:4a:b4:8f:fd:f5
++	d4:f3:99:31:b1:db:f6:1d:d9:12:a2:48:0a:d0:05:1a
++	72:dc:8e:30:67:3c:e0:6a:b5:dc:93:6f:e4:17:79:a1
++	63:2e:25:78:ef:86:d7:9c:f3:dd:5b:d2:bd:62:4f:44
++	f9:
++
++exp1:
++	60:a2:e2:49:5f:0e:83:20:1c:c7:f4:c6:d7:7b:2c:85
++	0b:36:f6:01:24:63:2c:97:b4:b0:f6:78:77:a4:51:42
++	79:e2:41:73:d5:42:6b:88:34:22:d6:d9:1a:a1:62:72
++	d4:17:df:df:40:f2:10:81:d8:3a:42:76:4c:cf:fd:b6
++	79:fc:71:99:69:13:e5:af:a8:68:d2:89:70:bf:27:ec
++	c8:1e:0c:6c:32:e9:5f:2b:1c:2f:dd:7f:31:ac:b0:c9
++	af:c6:d2:fc:e5:04:f5:3a:a0:cd:9f:42:6c:d6:48:7b
++	9b:03:ea:eb:72:65:fc:17:00:21:bb:b7:4c:3a:95:cf
++
++
++exp2:
++	00:a1:a7:61:1c:ed:4b:83:8e:24:86:08:c2:1d:1b:d1
++	5b:73:cb:80:70:be:9c:d3:87:02:3d:cf:ee:79:3b:d9
++	f8:d1:3e:1b:99:f9:9e:a4:8b:cd:6b:47:8e:92:f4:ee
++	b4:53:ed:35:24:fb:21:49:64:b6:9b:de:14:27:d7:5d
++	32:28:f2:a8:a5:c8:10:fc:4c:42:fe:4a:17:36:5f:2f
++	2f:8f:6d:d7:63:e2:33:3c:bf:f0:da:b7:3f:ab:f7:01
++	ad:f4:88:b8:63:51:4b:c8:4d:a4:04:30:87:4d:06:64
++	24:e0:2f:9d:b7:4c:d9:c4:c8:cf:36:3f:d3:12:c0:13
++	a9:
++
++
++Public Key PIN:
++	pin-sha256:I1Gv1FM9aCxvuCmF0uDnbDbIJgm1TFB2dtJV5v2iCEA=
++Public Key ID:
++	sha256:2351afd4533d682c6fb82985d2e0e76c36c82609b54c507676d255e6fda20840
++	sha1:a85b7025c64e3ee94c2ff34fd41390b9ad3e1ee9
++
++-----BEGIN RSA PRIVATE KEY-----
++MIIEpAIBAAKCAQEA0iG5y9VYkZPQgD3q0oq1KQbZ0eKmA18z0pFSc1+TyiyZHies
+++qCD6IqIeffu9IqS+SuBE5Jm1BWij/i65O5edwbwJz/AWta1jVdoM4MoooRgrOzf
++4mpofUc4+ZUAr81CYYk3KYXKbVftCCH/a2xIIBGs20oNQAR8UvBAVMfnXVSXOjAJ
++RGwP7LLZKnxNeJPGGT2ZVPWZi48h27EG31xXoGHnuljD9DOwqqzGdGVrw0VoKljh
++Pm/GoJiCj29lcSV7kd4lwSZPADXK0c5/7V0oTLhiuSoli2upha80esOeQ4IyACpJ
++jzuN4zDv6m1gfdUVcrP87Su6iKF5t8mnTniFNQIDAQABAoIBAB8MxLuN5ux7/w80
++FwLNZD+Pt5f/+a/93VZ8CsbplJkHRgjiq/jMxzERZ2E+dZzE7TrMZuJRe8hS+hZ0
++FonFf0fvSoVCMlY569Ha3JbgBp0dGnvy9JIsTwxT/eNDVTqlBe4LrI8CKgtGNsxA
++2dExyuaSNgyhQJv5DbXjsl3UvCdaF/0/vY5EVfLjlqzMEb5lAVWYkpKsWUb94hGA
++6xhWaoI8eewwtwabl1V0Nhd+2MaVTqXhVVoq1l3MhjmIgroxGZjXJigJ/rQ4/htD
++GRlPrvInGNYHmsIcZi1a5iIuynEm3HaPLvOE42Ffd9NjitBrQipvG5iRuYKN1MTz
++kpi0pPECgYEA4fQZNePi5xSmVotF+SsZuxOzZnNEXcppy3PZeFoP/d66dLNTcKmr
++UiI0eKImSqqPG2XBPt9ljJuacASucPbqxOUg+hbgT1b0e9EUzJThPFgCgpggzRPP
++okkTeojBhHKXTxvo1cttQ93SuAndT+7OAwvEwpvPPaCjV/0cyeuvrmcCgYEA7hMF
++8EwT4vgnU8StidkxuRvoF7nbNs1UDBXrUIXkiwPE8m2gQdyZIX4eiqFehv5T0nJT
++c4p+okOD1a+w4BqJtT+zJtKOkg3t0SnuxfH//Gcspl1MJ0CKXKEj1D8Ru+tRhL6D
++7HM8Lv9D9nQWuJU2KgseBIEECHpAId373ZcKdgMCgYBgouJJXw6DIBzH9MbXeyyF
++Czb2ASRjLJe0sPZ4d6RRQnniQXPVQmuINCLW2RqhYnLUF9/fQPIQgdg6QnZMz/22
++efxxmWkT5a+oaNKJcL8n7MgeDGwy6V8rHC/dfzGssMmvxtL85QT1OqDNn0Js1kh7
++mwPq63Jl/BcAIbu3TDqVzwKBgQChp2Ec7UuDjiSGCMIdG9Fbc8uAcL6c04cCPc/u
++eTvZ+NE+G5n5nqSLzWtHjpL07rRT7TUk+yFJZLab3hQn110yKPKopcgQ/ExC/koX
++Nl8vL49t12PiMzy/8Nq3P6v3Aa30iLhjUUvITaQEMIdNBmQk4C+dt0zZxMjPNj/T
++EsATqQKBgQCgTBVLhS+Bay7naDGEhAnERVUB2j0lnTdnqxkLH9Of/AkSMWZak9jZ
++8gDH9wMNK50tuDjQgt4D5yEDKU8qK7Vwo7xbvQ7xi7wiWEq0j/311POZMbHb9h3Z
++EqJICtAFGnLcjjBnPOBqtdyTb+QXeaFjLiV474bXnPPdW9K9Yk9E+Q==
++-----END RSA PRIVATE KEY-----
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/server-cert.pem rsyslog-8.2102.0/tests/testsuites/certchain/server-cert.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/server-cert.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/server-cert.pem	2022-09-06 10:48:41.513496694 +0200
+@@ -0,0 +1,55 @@
++-----BEGIN CERTIFICATE-----
++MIIEVTCCAr2gAwIBAgIBAjANBgkqhkiG9w0BAQsFADBpMQswCQYDVQQGEwJDWjEQ
++MA4GA1UECBMHTW9yYXZpYTENMAsGA1UEBxMEQnJubzEQMA4GA1UEChMHUmVkIEhh
++dDEMMAoGA1UECxMDR1NTMRkwFwYDVQQDExByc3lzbG9nK2NoYWluK2NhMB4XDTIy
++MDYwNjEzNDA0OVoXDTIzMDYwNjEzNDA0OVowbTELMAkGA1UEBhMCQ1oxEDAOBgNV
++BAgTB01vcmF2aWExDTALBgNVBAcTBEJybm8xEDAOBgNVBAoTB1JlZCBIYXQxDDAK
++BgNVBAsTA0dTUzEdMBsGA1UEAxMUcnN5c2xvZytjaGFpbitzZXJ2ZXIwggEiMA0G
++CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC3mDP67/SPVbCCgInxXNr9sOLz2yWx
++fa4jtgdbgWK5mib4XdPYTdH6hRiur/n6yn9rzhDeFFMUhSwQpQ81OyZfUFNU0A0q
++x7AZMgVOm3ZqMDk8O57UfuSdURJJPsEwMzZ8Q5d6wyq7xheX0DZjB8LUN8J6SX4w
++K2Ok1wCBOQdfjvW09tOVqQK7puHq85UWsEBTiZ7ie1Fg6FLNscPVoavjNNyYAORM
++Vz0Byv1zBdJzBHufqHUdjX7uMkUPcKfiU/TjQWMRYF3Yp5z2wFohi4Zgtise7xW5
++SfgcAIjA1bm5xMIaiUxRUZHUhCaoj6c2vZygrFO7MuB/2ngoEbqZ57pdAgMBAAGj
++gYMwgYAwDAYDVR0TAQH/BAIwADAwBgNVHREEKTAnggZmZWRvcmGHBH8AAAGBF3Jv
++b3RAZmVkb3JhdGxzd3d3c2VydmVyMB0GA1UdDgQWBBRxxQqJoRCHlrmwDLcB0aU3
++W/QRbDAfBgNVHSMEGDAWgBQ7t+ub2L0VzaTLfpubh4rnDk2RmjANBgkqhkiG9w0B
++AQsFAAOCAYEAkheMCnXNDh2fOhMyOifBFKqlUUsYzZoYU5UNweZijdKAKxJ4zdsS
++i31a2IG4ePBPX7PShUUr2E1PEQ2XBDi/HcCoK54qcqzhxGS83Rf/2YxN4BjU8jaA
++7RhIA0fv5haKxxhjRIDT6vsAXPB0HM/f3Y+E21GVbsQVUE1pP8QrDkcU0EwIjEfW
++tFEBitmb0s/11d8/ZLdYAuvvfzDzuN9kuAcj5dkdpB5Wo9R3h2NXnD6EIWIUHn/I
++zwgXdb/n9gUI6jQMC6shFjXScVT2jgjfziWi/M66PBbtEbEnhOEKdbW0o2lPiL3j
++2UDj6fMshRBAnSoBtEYm/lywBs3vDUGpMUSQFIAwPgUkizAl5DEdmE9PLqRL9HNT
++UIg8tQql9Xr29edEiuMHpIyH8eEa+KI2CpKG3KfYDBMaC7z9MvkpYuSuIG3dsQxy
++YguWDH7c0iosQVpHx8dxj5Exj1/QOXcD5tAVY/+DBe48nRzDTlZmRGQjtqr6Nw0j
++BIXBoqaes0D4
++-----END CERTIFICATE-----
++-----BEGIN CERTIFICATE-----
++MIIFBzCCA2+gAwIBAgIBATANBgkqhkiG9w0BAQsFADBtMQswCQYDVQQGEwJDWjEQ
++MA4GA1UECBMHTW9yYXZpYTENMAsGA1UEBxMEQnJubzEQMA4GA1UEChMHUmVkIEhh
++dDEMMAoGA1UECxMDR1NTMR0wGwYDVQQDExRyc3lzbG9nK2NoYWluK2Nhcm9vdDAe
++Fw0yMjA2MDYxMzQwNDlaFw0yMzA2MDYxMzQwNDlaMGkxCzAJBgNVBAYTAkNaMRAw
++DgYDVQQIEwdNb3JhdmlhMQ0wCwYDVQQHEwRCcm5vMRAwDgYDVQQKEwdSZWQgSGF0
++MQwwCgYDVQQLEwNHU1MxGTAXBgNVBAMTEHJzeXNsb2crY2hhaW4rY2EwggGiMA0G
++CSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQD6yDdc9T3oddk5smOhF8OkRXwb2nvC
++M4RPPiuiACvbVoc3UdW2e4NI77J75JzNQL3gQUpgxGcvWiQt3R67ecYgIWiq0zpi
++MrcU3S0dboK10A6NXtcVc4RgwUPf0c8toM975c/6q2XT9Q0SbcI7HKXdzTXQZJDz
++sqQ3UjJuoCLSl6Dd8M0HXJnd2HlF1h5JeIp5vGrCJzQ5SyO6b4jVODtx/uXBohGn
++2x8NdB7wO5NecDyryrwv+FsUXWS4NNmj917bBuXSx3SmW/G7e8AFvcHN8VG6AxH7
++nap+EWGQia+LNG489flgU3U7Ec8zpTrI1wU6bUi6lK/RPxU0ViCaceGjXfoNofIc
++gGJOSS0LaHjM+c4OhmKWrIJ59j2L/rlIvmfqRO3qgThF4eaOfQTbixe/oiy3gR85
+++X6YDXvBwTGZDD6OeG1fCzx/snQLiP3/dRv6LJFE8Krawc9OCOWRDRlIxubrkmYz
++LVBxcFgI4BBGNYVsaMSYrkCVaS2Rv1sNAi0CAwEAAaOBtTCBsjAPBgNVHRMBAf8E
++BTADAQH/MCQGA1UdEQQdMBuCBmZlZG9yYYcEfwAAAYELcm9vdEBmZWRvcmEwDgYD
++VR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQ7t+ub2L0VzaTLfpubh4rnDk2RmjAfBgNV
++HSMEGDAWgBSv9FgWjwDV6oGLewYzCo2/AdWTmzApBgNVHR8EIjAgMB6gHKAahhho
++dHRwOi8vMTI3LjAuMC4xL2dldGNybC8wDQYJKoZIhvcNAQELBQADggGBADrv9nld
++FjKZCIVQCVxYc1/KFFnKo2KRCqvSdfb235Kx+5tSFWUsOfkSGjfLrv2+IFKSirFQ
++uFSac/qOrMo/W/4A+ypahG9Sx9PRD626/myr8exee2ygkcuGOuXvX3HkcpzNCmId
++ZS5ygtscFq3NdntwBJHe2ANOSJKIIBzC+gzn4r/V6PdxPEjiUrFs515/RBByi63r
++wWPeqvbaectyZyFIS0XN3LAjVb+zu0NQJqBpUGJlRBI1bRbPECu94LB8Huk/jgSJ
++OyFUKrnNeqaGqKnRfHxJxT/LjeTkQ/5cCOQTuE9IPbRvTykUzUQ3PrltwNqzAb44
++9Trqvqg+qGTfNuI7EZAO26zXbltYVZ+BmlULjKors49Ozq5l1JIevvq66etrE9oT
++DsII88MSIWn8bqaXETfKdIWtWu7Os7tmBTnfDQWGpNDJ3UwDpkyQPYJZJuSfELX0
++jpuWuE/1SbLxTx8eAe83z4yM3C21Kg5K2eJ0udagjM8xPdqYI8tF/4bNbA==
++-----END CERTIFICATE-----
+diff -Nuar rsyslog-8.2102.0.ori/tests/testsuites/certchain/server-key.pem rsyslog-8.2102.0/tests/testsuites/certchain/server-key.pem
+--- rsyslog-8.2102.0.ori/tests/testsuites/certchain/server-key.pem	1970-01-01 01:00:00.000000000 +0100
++++ rsyslog-8.2102.0/tests/testsuites/certchain/server-key.pem	2022-09-06 12:10:28.635549755 +0200
+@@ -0,0 +1,133 @@
++Public Key Info:
++	Public Key Algorithm: RSA
++	Key Security Level: Medium (2048 bits)
++
++modulus:
++	00:b7:98:33:fa:ef:f4:8f:55:b0:82:80:89:f1:5c:da
++	fd:b0:e2:f3:db:25:b1:7d:ae:23:b6:07:5b:81:62:b9
++	9a:26:f8:5d:d3:d8:4d:d1:fa:85:18:ae:af:f9:fa:ca
++	7f:6b:ce:10:de:14:53:14:85:2c:10:a5:0f:35:3b:26
++	5f:50:53:54:d0:0d:2a:c7:b0:19:32:05:4e:9b:76:6a
++	30:39:3c:3b:9e:d4:7e:e4:9d:51:12:49:3e:c1:30:33
++	36:7c:43:97:7a:c3:2a:bb:c6:17:97:d0:36:63:07:c2
++	d4:37:c2:7a:49:7e:30:2b:63:a4:d7:00:81:39:07:5f
++	8e:f5:b4:f6:d3:95:a9:02:bb:a6:e1:ea:f3:95:16:b0
++	40:53:89:9e:e2:7b:51:60:e8:52:cd:b1:c3:d5:a1:ab
++	e3:34:dc:98:00:e4:4c:57:3d:01:ca:fd:73:05:d2:73
++	04:7b:9f:a8:75:1d:8d:7e:ee:32:45:0f:70:a7:e2:53
++	f4:e3:41:63:11:60:5d:d8:a7:9c:f6:c0:5a:21:8b:86
++	60:b6:2b:1e:ef:15:b9:49:f8:1c:00:88:c0:d5:b9:b9
++	c4:c2:1a:89:4c:51:51:91:d4:84:26:a8:8f:a7:36:bd
++	9c:a0:ac:53:bb:32:e0:7f:da:78:28:11:ba:99:e7:ba
++	5d:
++
++public exponent:
++	01:00:01:
++
++private exponent:
++	68:06:20:25:a5:82:0f:18:c1:3b:20:33:88:83:51:3d
++	7e:d5:08:d0:79:a9:f8:89:0b:88:de:e0:55:0e:28:15
++	94:d1:12:f0:ae:55:61:8d:2d:8e:8f:a3:fb:e2:c2:8b
++	b1:fc:7f:08:25:c1:f1:15:87:a3:22:b2:dc:39:58:83
++	96:d2:b0:72:75:93:70:b3:71:83:2b:08:a0:03:57:25
++	5d:b8:a8:1b:55:51:54:9d:62:4b:17:1f:2c:7c:ef:f7
++	86:2f:12:0c:27:ba:f5:cb:c6:a0:69:03:f7:d6:74:e8
++	a3:73:58:b0:7d:84:33:81:70:eb:b5:48:82:94:8f:ea
++	4c:c7:9c:58:02:90:68:b1:64:29:df:a8:8a:69:15:d4
++	49:21:2f:aa:25:f1:e7:10:8b:93:37:ca:51:d3:4e:d6
++	de:cf:60:04:6b:10:41:1b:f5:0f:be:b7:2a:cd:41:44
++	50:25:be:e5:57:60:1e:3e:e9:d7:70:86:68:a6:4f:3d
++	7d:d8:0e:7f:9b:de:de:e6:02:35:33:9f:b6:68:bb:cd
++	2f:33:69:09:9e:da:91:6b:16:89:db:14:20:59:3a:92
++	7e:78:4e:e1:02:3f:c8:a5:3f:bd:f2:bc:3a:da:f2:97
++	06:f5:96:eb:c8:09:f7:04:cb:7f:e2:e2:12:52:d4:21
++
++
++prime1:
++	00:ed:e4:b8:72:ee:b0:9e:38:db:f8:e7:fa:52:a5:94
++	4a:4b:05:54:f0:96:23:72:d6:01:ba:9f:f4:3e:65:24
++	29:c0:47:4a:6f:a9:a4:02:36:c5:2c:c5:ea:cd:09:5c
++	2d:8e:3c:56:aa:e4:e7:85:32:a8:a7:4f:18:12:17:8c
++	93:15:07:da:3e:f4:df:33:7e:35:39:59:2d:f4:1c:ba
++	65:e8:42:c7:75:a0:c2:53:47:ad:ee:74:44:21:6a:42
++	75:7f:40:1f:8b:06:0e:df:c3:02:4d:50:58:75:f2:29
++	58:e2:0c:a0:7b:fe:be:c4:ab:76:ff:24:c1:4b:e6:ce
++	75:
++
++prime2:
++	00:c5:91:7c:48:59:dd:05:68:5c:8a:46:0b:3b:69:92
++	80:d1:c6:28:27:88:c8:a9:73:7c:32:ee:87:a7:31:29
++	ff:56:38:41:07:3e:0f:01:5c:cf:eb:93:db:e7:fb:b9
++	e7:15:94:93:ea:fa:f8:60:79:c6:16:d2:db:9b:64:5f
++	c3:b8:f0:52:c0:e7:ff:e0:9a:94:22:fb:7e:5e:80:8f
++	c0:ca:46:f4:87:91:e7:ad:6d:74:26:d1:fa:c0:f8:f5
++	7e:b3:0c:bb:23:5e:7d:5d:8b:c9:2e:68:76:be:d4:b4
++	75:de:3c:70:70:ad:1e:64:de:e4:1d:f7:df:af:46:0f
++	49:
++
++coefficient:
++	00:89:f1:2c:f9:14:89:25:21:7a:ad:75:30:f0:b1:e7
++	20:b3:14:14:d7:c9:b6:78:3c:c7:c8:92:3a:64:8e:47
++	d0:10:fc:01:a9:a6:25:a5:61:6d:8f:da:d4:85:fa:06
++	9f:a5:27:a8:7d:38:e2:67:19:65:ab:a9:00:52:8c:f3
++	51:fe:f9:a6:4f:ab:47:04:0a:86:ae:f0:fe:3d:2d:72
++	76:6d:ad:03:48:af:23:67:92:28:34:83:bc:45:7d:c0
++	45:ca:89:4a:4f:dd:11:a6:3a:5a:23:47:f4:7c:82:42
++	dc:e8:56:85:d8:1b:9d:08:9c:6e:ca:17:58:d7:d4:bb
++	77:
++
++exp1:
++	21:50:b8:ac:0f:d5:58:33:2a:4b:2f:61:95:15:6f:31
++	00:54:9c:d2:9c:94:16:4e:f6:2b:06:9f:93:e5:62:2d
++	1e:aa:5d:38:4a:0f:97:e7:c7:b1:3f:7e:64:7c:7d:16
++	3c:27:23:14:07:be:8c:9e:cd:93:b0:b5:f4:42:ac:03
++	25:1c:d6:69:9e:ad:6b:6e:af:51:7a:b5:be:cc:0f:26
++	9a:62:4f:c0:9f:64:d7:78:e0:58:d6:9b:7b:fa:7f:98
++	28:db:f8:0e:e6:28:4b:19:ea:46:9d:8b:e5:e8:a5:f5
++	b6:a2:82:0f:1b:5b:e7:fb:03:4d:33:fe:85:fc:aa:c9
++
++
++exp2:
++	59:36:db:22:68:c1:ef:a1:32:b8:95:ec:98:85:91:cc
++	6d:ed:c7:50:22:ea:49:ea:86:59:11:71:5c:44:4d:2c
++	aa:28:78:e4:e6:57:2c:4c:56:ef:90:33:2b:4c:76:a4
++	2d:10:8c:c2:fd:55:8f:6b:2d:d2:3c:a1:42:48:4f:1e
++	38:b2:fd:0b:73:38:0e:9a:7e:ee:55:16:b9:61:e0:88
++	34:4f:5a:38:a5:e0:32:66:4c:9f:03:0e:f2:78:f9:92
++	9f:13:ce:a5:a8:13:80:5c:91:1a:4d:bd:e1:6a:77:9b
++	0a:21:cc:bc:74:d0:56:c8:77:c6:38:9a:5f:b1:89:51
++
++
++
++Public Key PIN:
++	pin-sha256:FSR0pC1TUEe+ZMU7YSVDDmYP4hmDlsIJRKf4D8LiJZ8=
++Public Key ID:
++	sha256:152474a42d535047be64c53b6125430e660fe2198396c20944a7f80fc2e2259f
++	sha1:71c50a89a1108796b9b00cb701d1a5375bf4116c
++
++-----BEGIN RSA PRIVATE KEY-----
++MIIEowIBAAKCAQEAt5gz+u/0j1WwgoCJ8Vza/bDi89slsX2uI7YHW4FiuZom+F3T
++2E3R+oUYrq/5+sp/a84Q3hRTFIUsEKUPNTsmX1BTVNANKsewGTIFTpt2ajA5PDue
++1H7knVESST7BMDM2fEOXesMqu8YXl9A2YwfC1DfCekl+MCtjpNcAgTkHX471tPbT
++lakCu6bh6vOVFrBAU4me4ntRYOhSzbHD1aGr4zTcmADkTFc9Acr9cwXScwR7n6h1
++HY1+7jJFD3Cn4lP040FjEWBd2Kec9sBaIYuGYLYrHu8VuUn4HACIwNW5ucTCGolM
++UVGR1IQmqI+nNr2coKxTuzLgf9p4KBG6mee6XQIDAQABAoIBAGgGICWlgg8YwTsg
++M4iDUT1+1QjQean4iQuI3uBVDigVlNES8K5VYY0tjo+j++LCi7H8fwglwfEVh6Mi
++stw5WIOW0rBydZNws3GDKwigA1clXbioG1VRVJ1iSxcfLHzv94YvEgwnuvXLxqBp
++A/fWdOijc1iwfYQzgXDrtUiClI/qTMecWAKQaLFkKd+oimkV1EkhL6ol8ecQi5M3
++ylHTTtbez2AEaxBBG/UPvrcqzUFEUCW+5VdgHj7p13CGaKZPPX3YDn+b3t7mAjUz
++n7Zou80vM2kJntqRaxaJ2xQgWTqSfnhO4QI/yKU/vfK8Otrylwb1luvICfcEy3/i
++4hJS1CECgYEA7eS4cu6wnjjb+Of6UqWUSksFVPCWI3LWAbqf9D5lJCnAR0pvqaQC
++NsUsxerNCVwtjjxWquTnhTKop08YEheMkxUH2j703zN+NTlZLfQcumXoQsd1oMJT
++R63udEQhakJ1f0AfiwYO38MCTVBYdfIpWOIMoHv+vsSrdv8kwUvmznUCgYEAxZF8
++SFndBWhcikYLO2mSgNHGKCeIyKlzfDLuh6cxKf9WOEEHPg8BXM/rk9vn+7nnFZST
++6vr4YHnGFtLbm2Rfw7jwUsDn/+CalCL7fl6Aj8DKRvSHkeetbXQm0frA+PV+swy7
++I159XYvJLmh2vtS0dd48cHCtHmTe5B33369GD0kCgYAhULisD9VYMypLL2GVFW8x
++AFSc0pyUFk72Kwafk+ViLR6qXThKD5fnx7E/fmR8fRY8JyMUB76Mns2TsLX0QqwD
++JRzWaZ6ta26vUXq1vswPJppiT8CfZNd44FjWm3v6f5go2/gO5ihLGepGnYvl6KX1
++tqKCDxtb5/sDTTP+hfyqyQKBgFk22yJowe+hMriV7JiFkcxt7cdQIupJ6oZZEXFc
++RE0sqih45OZXLExW75AzK0x2pC0QjML9VY9rLdI8oUJITx44sv0LczgOmn7uVRa5
++YeCINE9aOKXgMmZMnwMO8nj5kp8TzqWoE4BckRpNveFqd5sKIcy8dNBWyHfGOJpf
++sYlRAoGBAInxLPkUiSUheq11MPCx5yCzFBTXybZ4PMfIkjpkjkfQEPwBqaYlpWFt
++j9rUhfoGn6UnqH044mcZZaupAFKM81H++aZPq0cECoau8P49LXJ2ba0DSK8jZ5Io
++NIO8RX3ARcqJSk/dEaY6WiNH9HyCQtzoVoXYG50InG7KF1jX1Lt3
++-----END RSA PRIVATE KEY-----
