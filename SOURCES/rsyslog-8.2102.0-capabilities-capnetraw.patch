@@ -1,0 +1,11 @@
+diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.c
+--- rsyslog-8.2102.0/tools/rsyslogd.c.orig	2023-03-06 09:33:13.969300666 +0100
++++ rsyslog-8.2102.0/tools/rsyslogd.c	2023-03-06 09:33:35.089326502 +0100
+@@ -2164,6 +2164,7 @@ main(int argc, char **argv)
+ 		CAP_SETGID,
+ 		CAP_SETUID,
+ 		CAP_DAC_OVERRIDE,
++		CAP_NET_RAW,
+ 		CAP_SYS_ADMIN,
+ 		CAP_SYS_CHROOT,
+ 		CAP_SYS_RESOURCE,

@@ -1,0 +1,32 @@
+diff -up rsyslog-8.2102.0/doc/configuration/modules/omelasticsearch.html.orig rsyslog-8.2102.0/doc/configuration/modules/omelasticsearch.html
+--- rsyslog-8.2102.0/doc/configuration/modules/omelasticsearch.html.orig	2023-05-11 15:56:24.308601241 +0200
++++ rsyslog-8.2102.0/doc/configuration/modules/omelasticsearch.html	2023-05-11 15:57:11.000662477 +0200
+@@ -156,6 +156,28 @@ this timeframe. Defaults to 3500.</p>
+ <p><em>Note, the health check is verifying connectivity only, not the state of
+ the Elasticsearch cluster.</em></p>
+ </div>
++
++<div class="section" id="esVersion.major">
++  <span id="id2"></span><h4>esVersion.major<a class="headerlink" href="#esVersion.major" title="Permalink to this headline">¶</a></h4>
++  <table border="1" class="colwidths-auto parameter-table docutils">
++  <thead valign="bottom">
++  <tr class="row-odd"><th class="head">type</th>
++  <th class="head">default</th>
++  <th class="head">mandatory</th>
++  <th class="head"><code class="docutils literal notranslate"><span class="pre">obsolete</span> <span class="pre">legacy</span></code> directive</th>
++  </tr>
++  </thead>
++  <tbody valign="top">
++  <tr class="row-even"><td>integer</td>
++  <td>0</td>
++  <td>no</td>
++  <td>none</td>
++  </tr>
++  </tbody>
++  </table>
++  <p>ElasticSearch is notoriously bad at maintaining backwards compatibility. For this reason, the setting can be used to configure the server’s major version number (e.g. 7, 8, …). As far as we know breaking changes only happen with major version changes. As of now, only value 8 triggers API changes. All other values select pre-version-8 API usage.</p>
++  </div>
++
+ <div class="section" id="searchindex">
+ <span id="id3"></span><h4>searchIndex<a class="headerlink" href="#searchindex" title="Permalink to this headline">¶</a></h4>
+ <table border="1" class="colwidths-auto parameter-table docutils">
