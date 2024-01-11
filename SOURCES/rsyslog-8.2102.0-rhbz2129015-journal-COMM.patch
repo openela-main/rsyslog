@@ -1,0 +1,12 @@
+diff -up rsyslog-8.2102.0/plugins/imjournal/imjournal.c.orig rsyslog-8.2102.0/plugins/imjournal/imjournal.c
+--- rsyslog-8.2102.0/plugins/imjournal/imjournal.c.orig	2023-05-19 10:32:32.467826852 +0200
++++ rsyslog-8.2102.0/plugins/imjournal/imjournal.c	2023-05-19 10:33:34.426902983 +0200
+@@ -452,6 +452,8 @@ readjournal(void)
+ 	/* Get message identifier, client pid and add ':' */
+ 	if (journalGetData("SYSLOG_IDENTIFIER", &get, &length) >= 0) {
+ 		CHKiRet(sanitizeValue(((const char *)get) + 18, length - 18, &sys_iden));
++	} else if (journalGetData("_COMM", &get, &length) >= 0) {
++		CHKiRet(sanitizeValue(((const char *)get) + 6, length - 6, &sys_iden));
+ 	} else {
+ 		CHKmalloc(sys_iden = strdup(cs.dfltTag));
+ 	}

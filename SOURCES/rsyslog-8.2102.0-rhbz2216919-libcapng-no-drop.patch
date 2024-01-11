@@ -1,64 +1,11 @@
-diff -up rsyslog-8.2102.0/runtime/glbl.c.orig rsyslog-8.2102.0/runtime/glbl.c
---- rsyslog-8.2102.0/runtime/glbl.c.orig	2023-07-14 09:32:51.781256794 +0200
-+++ rsyslog-8.2102.0/runtime/glbl.c	2023-07-14 09:34:34.061315870 +0200
-@@ -230,7 +230,8 @@ static struct cnfparamdescr cnfparamdesc
- 	{ "reverselookup.cache.ttl.enable", eCmdHdlrBinary, 0 },
- 	{ "shutdown.queue.doublesize", eCmdHdlrBinary, 0 },
- 	{ "debug.files", eCmdHdlrArray, 0 },
--	{ "debug.whitelist", eCmdHdlrBinary, 0 }
-+	{ "debug.whitelist", eCmdHdlrBinary, 0 },
-+	{ "libcapng.default", eCmdHdlrBinary, 0 }
- };
- static struct cnfparamblk paramblk =
- 	{ CNFPARAMBLK_VERSION,
-@@ -1315,6 +1316,13 @@ glblDoneLoadCnf(void)
- 		if(!strcmp(paramblk.descr[i].name, "workdirectory")) {
- 			cstr = (uchar*) es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
- 			setWorkDir(NULL, cstr);
-+		} else if(!strcmp(paramblk.descr[i].name, "libcapng.default")) {
-+#ifdef ENABLE_LIBCAPNG
-+			loadConf->globals.bAbortOnFailedLibcapngSetup = (int) cnfparamvals[i].val.d.n;
-+#else
-+			LogError(0, RS_RET_ERR, "rsyslog wasn't "
-+				"compiled with libcap-ng support.");
-+#endif
- 		} else if(!strcmp(paramblk.descr[i].name, "variables.casesensitive")) {
- 			const int val = (int) cnfparamvals[i].val.d.n;
- 			fjson_global_do_case_sensitive_comparison(val);
-diff -up rsyslog-8.2102.0/runtime/rsconf.c.orig rsyslog-8.2102.0/runtime/rsconf.c
---- rsyslog-8.2102.0/runtime/rsconf.c.orig	2023-07-14 09:32:56.923259764 +0200
-+++ rsyslog-8.2102.0/runtime/rsconf.c	2023-07-14 09:34:47.722323759 +0200
-@@ -146,6 +146,9 @@ int rsconfNeedDropPriv(rsconf_t *const c
- 
- static void cnfSetDefaults(rsconf_t *pThis)
- {
-+#ifdef ENABLE_LIBCAPNG
-+	pThis->globals.bAbortOnFailedLibcapngSetup = 1;
-+#endif
- 	pThis->globals.bAbortOnUncleanConfig = 0;
- 	pThis->globals.bReduceRepeatMsgs = 0;
- 	pThis->globals.bDebugPrintTemplateList = 1;
-diff -up rsyslog-8.2102.0/runtime/rsconf.h.orig rsyslog-8.2102.0/runtime/rsconf.h
---- rsyslog-8.2102.0/runtime/rsconf.h.orig	2023-07-14 09:33:02.575263028 +0200
-+++ rsyslog-8.2102.0/runtime/rsconf.h	2023-07-14 09:35:29.265347750 +0200
-@@ -61,6 +61,9 @@ struct queuecnf_s {
-  * be re-set as often as the user likes).
-  */
- struct globals_s {
-+#ifdef ENABLE_LIBCAPNG
-+	int bAbortOnFailedLibcapngSetup;
-+#endif
- 	int bDebugPrintTemplateList;
- 	int bDebugPrintModuleList;
- 	int bDebugPrintCfSysLineHandlerList;
 diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.c
---- rsyslog-8.2102.0/tools/rsyslogd.c.orig	2023-07-14 09:29:13.038130459 +0200
-+++ rsyslog-8.2102.0/tools/rsyslogd.c	2023-07-14 09:31:58.575226065 +0200
+--- rsyslog-8.2102.0/tools/rsyslogd.c.orig	2023-06-27 08:56:27.321174891 +0200
++++ rsyslog-8.2102.0/tools/rsyslogd.c	2023-06-27 08:58:17.977481782 +0200
 @@ -1557,6 +1557,88 @@ initAll(int argc, char **argv)
  	resetErrMsgsFlag();
  	localRet = rsconf.Load(&ourConf, ConfFile);
  
-+#ifdef ENABLE_LIBCAPNG
++	#ifdef ENABLE_LIBCAPNG
 +	/*
 +	 * Drop capabilities to the necessary set
 +	 */
@@ -143,7 +90,7 @@ diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.
  	if(fp_rs_full_conf_output != NULL) {
  		if(fp_rs_full_conf_output != stdout) {
  			fclose(fp_rs_full_conf_output);
-@@ -2147,45 +2229,6 @@ main(int argc, char **argv)
+@@ -2147,52 +2229,6 @@ main(int argc, char **argv)
  		bProcessInternalMessages = 1;
  	dbgClassInit();
  
@@ -151,7 +98,7 @@ diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.
 -	/*
 -	 * Drop capabilities to the necessary set
 -	 */
--	int capng_rc;
+-	int capng_rc, capng_failed = 0;
 -	capng_clear(CAPNG_SELECT_BOTH);
 -
 -	if ((capng_rc = capng_updatev(CAPNG_ADD, CAPNG_EFFECTIVE|CAPNG_PERMITTED,
@@ -161,10 +108,9 @@ diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.
 -		CAP_LEASE,
 -		CAP_NET_ADMIN,
 -		CAP_NET_BIND_SERVICE,
+-		CAP_DAC_OVERRIDE,
 -		CAP_SETGID,
 -		CAP_SETUID,
--		CAP_DAC_OVERRIDE,
--		CAP_NET_RAW,
 -		CAP_SYS_ADMIN,
 -		CAP_SYS_CHROOT,
 -		CAP_SYS_RESOURCE,
@@ -173,17 +119,25 @@ diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.
 -	)) != 0) {
 -		LogError(0, RS_RET_LIBCAPNG_ERR,
 -				"could not update the internal posix capabilities settings "
--				"based on the options passed to it, capng_updatev=%d\n", capng_rc);
--		exit(-1);
+-				"based on the options passed to it, capng_updatev=%d", capng_rc);
+-		capng_failed = 1;
 -	}
 -
 -	if ((capng_rc = capng_apply(CAPNG_SELECT_BOTH)) != 0) {
 -		LogError(0, RS_RET_LIBCAPNG_ERR,
--			"could not transfer  the  specified  internal posix  capabilities "
--			"settings to the kernel, capng_apply=%d\n", capng_rc);
--		exit(-1);
+-			"could not transfer the specified internal posix capabilities "
+-			"settings to the kernel, capng_apply=%d", capng_rc);
+-		capng_failed = 1;
 -	}
--	DBGPRINTF("Capabilities were dropped successfully\n");
+-
+-	if (capng_failed) {
+-		DBGPRINTF("Capabilities were not dropped successfully.\n");
+-		if (loadConf->globals.bAbortOnFailedLibcapngSetup) {
+-			exit(RS_RET_LIBCAPNG_ERR);
+-		}
+-	} else {
+-		DBGPRINTF("Capabilities were dropped successfully\n");
+-	}
 -#endif
 -
  	initAll(argc, argv);

@@ -5,7 +5,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2102.0
-Release: 113%{?dist}.1
+Release: 117%{?dist}
 License: (GPLv3+ and ASL 2.0)
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -16,7 +16,7 @@ Source4: rsyslog.log
 Source5: rsyslog.service
 # Add qpid-proton as another source, enable omamqp1 module in a
 # separatae sub-package with it statically linked(see rhbz#1713427)
-Source6: qpid-proton-0.34.0.tar.gz
+Source6: qpid-proton-0.39.0.tar.gz
 
 Patch0:  rsyslog-8.2102.0-rhbz2064318-errfile-maxsize-doc.patch
 Patch1:  rsyslog-8.1911.0-rhbz1659898-imjournal-default-tag.patch
@@ -27,7 +27,6 @@ Patch5:  rsyslog-8.2102.0-rhbz1984489-remove-abort-on-id-resolution-fail.patch
 Patch6:  rsyslog-8.2102.0-rhbz1938863-covscan.patch
 Patch7:  rsyslog-8.2102.0-rhbz2021076-prioritize-SAN.patch
 Patch8:  rsyslog-8.2102.0-rhbz2064318-errfile-maxsize.patch
-Patch9:  openssl3-compatibility.patch
 Patch10: rsyslog-8.2102.0-rhbz1909639-statefiles-fix.patch
 Patch11: rsyslog-8.2102.0-rhbz1909639-statefiles-doc.patch
 Patch12: rsyslog-8.2102.0-rhbz2046158-gnutls-broken-connection.patch
@@ -38,8 +37,19 @@ Patch16: rsyslog-8.2102.0-rhbz2127404-libcap-ng.patch
 Patch17: rsyslog-8.2102.0-rhbz2157658-imklog.patch
 Patch18: rsyslog-8.2102.0-capabilities-drop-credential.patch
 Patch19: rsyslog-8.2102.0-capabilities-capnetraw.patch
-Patch20: rsyslog-8.2102.0-libcapng-no-cap-support.patch
-Patch21: rsyslog-8.2102.0-libcapng-no-cap-support2.patch
+Patch20: rsyslog-8.2102.0-rhbz2157804-cstrlen.patch
+Patch21: rsyslog-8.2102.0-rhbz2129015-journal-COMM.patch
+Patch22: rsyslog-8.2102.0-rhbz2192955-es-0.patch
+Patch23: rsyslog-8.2102.0-rhbz2192955-es-1.patch
+Patch24: rsyslog-8.2102.0-rhbz2192955-es-2.patch
+Patch25: rsyslog-8.2102.0-rhbz2192955-es-3.patch
+Patch26: rsyslog-8.2102.0-rhbz2192955-es-4.patch
+Patch27: rsyslog-8.2102.0-rhbz2192955-es-5.patch
+Patch28: rsyslog-8.2102.0-rhbz2192955-es-6.patch
+Patch29: rsyslog-8.2102.0-rhbz2192955-es-doc.patch
+Patch30: rsyslog-8.2102.0-rhbz2216919-libcapng-default.patch
+Patch31: rsyslog-8.2102.0-rhbz2216919-libcapng-no-drop.patch
+Patch32: rsyslog-8.2102.0-libcapng-no-cap-support2.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -295,12 +305,19 @@ mv build doc
 %patch17 -p1 -b .imklog-leak
 %patch18 -p1 -b .capabilities-drop-credential
 %patch19 -p1 -b .capabilities-capnetraw
-%patch20 -p1
-%patch21 -p1
-
-pushd ..
-%patch9 -p1 -b .openssl-compatibility
-popd
+%patch20 -p1 -b .cstrlen
+%patch21 -p1 -b .journalCOMM
+%patch22 -p1 -b .es0
+%patch23 -p1 -b .es1
+%patch24 -p1 -b .es2
+%patch25 -p1 -b .es3
+%patch26 -p1 -b .es4
+%patch27 -p1 -b .es5
+%patch28 -p1 -b .es6
+%patch29 -p1 -b .es-doc
+%patch30 -p1
+%patch31 -p1
+%patch32 -p1
 
 %build
 # Add additional flags as per https://one.redhat.com/rhel-developer-guide/#_what_are_the_required_flags
@@ -318,7 +335,7 @@ export CFLAGS="$RPM_OPT_FLAGS -fpic"
 %endif
 # build the proton first
 (
-	cd %{_builddir}/qpid-proton-0.34.0
+	cd %{_builddir}/qpid-proton-0.39.0
 	mkdir bld
 	cd bld
 
@@ -350,7 +367,7 @@ autoreconf -if
 	--prefix=/usr \
 	--disable-static \
 	--disable-testbench \
-	--enable-omamqp1 PROTON_LIBS="%{_builddir}/qpid-proton-0.34.0/bld/c/libqpid-proton-core-static.a %{_builddir}/qpid-proton-0.34.0/bld/c/libqpid-proton-proactor-static.a %{_builddir}/qpid-proton-0.34.0/bld/c/libqpid-proton-static.a -lssl -lsasl2 -lcrypto" PROTON_CFLAGS="-I%{_builddir}/qpid-proton-0.34.0/bld/c/include" \
+	--enable-omamqp1 PROTON_LIBS="%{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-core-static.a %{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-proactor-static.a %{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-static.a -lssl -lsasl2 -lcrypto" PROTON_CFLAGS="-I%{_builddir}/qpid-proton-0.39.0/bld/c/include" \
 	--enable-elasticsearch \
 	--enable-generate-man-pages \
 	--enable-gnutls \
@@ -562,9 +579,33 @@ done
 
 
 %changelog
-* Fri Jul 14 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-113.1
-- Do not drop capabilities if we don't have any
-- resolves: rhbz#2225088
+* Fri Jul 28 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-117
+- Add back CAP_NET_RAW capability due to omudpspoof
+  resolves: rhbz#2216919
+
+* Tue Jun 27 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-116
+- libcapng: do not try to drop capabilities that are not present
+- add global libcapng.default to not abort when libcapng fails
+  resolves: rhbz#2216919
+
+* Mon May 22 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-115
+- omelasticsearch: make compatible with elasticsearch>=8
+- add new action specific parameter esversion.major
+  resolves: rhbz#2209017
+
+* Fri May 19 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-114
+- Fix wrong type conversion in cstrLen()
+  resolves: rhbz#2157805
+- imjournal: by default retrieves _PID from journal as PID number
+  resolves: rhbz#2176397
+- Systemd service file hardening
+  resolves: rhbz#2176403
+- rsyslog.conf: load imuxsock and imjournal before loading rsyslog.d
+  resolves: rhbz#2165899
+- rsyslog is now started after the network service during boot
+  resolves: rhbz#2074318
+- imjournal: add second fallback to the message identifier
+  resolves: rhbv#2129015
 
 * Tue Mar 07 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-113
 - Do not allow having selinux-policy < 38.1.3-1
