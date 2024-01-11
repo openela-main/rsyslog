@@ -1,0 +1,37 @@
+diff -up rsyslog-8.2102.0/plugins/omelasticsearch/omelasticsearch.c.orig rsyslog-8.2102.0/plugins/omelasticsearch/omelasticsearch.c
+--- rsyslog-8.2102.0/plugins/omelasticsearch/omelasticsearch.c.orig	2023-05-11 14:14:39.778187570 +0200
++++ rsyslog-8.2102.0/plugins/omelasticsearch/omelasticsearch.c	2023-05-11 14:15:36.254234445 +0200
+@@ -232,7 +232,11 @@ static rsRetVal curlSetup(wrkrInstanceDa
+ BEGINcreateInstance
+ CODESTARTcreateInstance
+ 	pData->fdErrFile = -1;
+-	pthread_mutex_init(&pData->mutErrFile, NULL);
++	if(pthread_mutex_init(&pData->mutErrFile, NULL) != 0) {
++		LogError(errno, RS_RET_ERR, "omelasticsearch: cannot create "
++			"error file mutex, failing this action");
++		ABORT_FINALIZE(RS_RET_ERR);
++	}
+ 	pData->caCertFile = NULL;
+ 	pData->myCertFile = NULL;
+ 	pData->myPrivKeyFile = NULL;
+@@ -240,6 +244,7 @@ CODESTARTcreateInstance
+ 	pData->retryRulesetName = NULL;
+ 	pData->retryRuleset = NULL;
+ 	pData->rebindInterval = DEFAULT_REBIND_INTERVAL;
++finalize_it:
+ ENDcreateInstance
+ 
+ BEGINcreateWrkrInstance
+@@ -2165,10 +2170,12 @@ ENDfreeCnf
+ 
+ BEGINdoHUP
+ CODESTARTdoHUP
++	pthread_mutex_lock(&pData->mutErrFile);
+ 	if(pData->fdErrFile != -1) {
+ 		close(pData->fdErrFile);
+ 		pData->fdErrFile = -1;
+ 	}
++	pthread_mutex_unlock(&pData->mutErrFile);
+ ENDdoHUP
+ 
+ 

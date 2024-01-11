@@ -6,7 +6,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2102.0
-Release: 13%{?dist}
+Release: 15%{?dist}
 License: (GPLv3+ and ASL 2.0)
 Group: System Environment/Daemons
 ExcludeArch: i686
@@ -67,6 +67,15 @@ Patch15: rsyslog-8.2102.0-rhbz2046158-gnutls-broken-connection.patch
 Patch16: rsyslog-8.2102.0-rhbz2124934-extra-ca-files.patch
 Patch17: rsyslog-8.2102.0-rhbz2124934-extra-ca-files-doc.patch
 Patch18: rsyslog-8.2102.0-rhbz2157658-imklog.patch
+Patch19: rsyslog-8.2102.0-rhbz2157804-cstrlen.patch
+Patch20: rsyslog-8.2102.0-rhbz2192955-es-0.patch
+Patch21: rsyslog-8.2102.0-rhbz2192955-es-1.patch
+Patch22: rsyslog-8.2102.0-rhbz2192955-es-2.patch
+Patch23: rsyslog-8.2102.0-rhbz2192955-es-3.patch
+Patch24: rsyslog-8.2102.0-rhbz2192955-es-4.patch
+Patch25: rsyslog-8.2102.0-rhbz2192955-es-5.patch
+Patch26: rsyslog-8.2102.0-rhbz2192955-es-6.patch
+Patch27: rsyslog-8.2102.0-rhbz2192955-es-doc.patch
 
 %package crypto
 Summary: Encryption support
@@ -276,7 +285,6 @@ of source ports.
 %prep
 # set up rsyslog-doc sources
 %setup -q -a 1 -T -c
-
 #regenerate the docs
 
 #mv build/searchindex.js searchindex_backup.js
@@ -310,6 +318,15 @@ mv build doc
 %patch16 -p1 -b .extra-ca-files
 %patch17 -p1 -b .extra-ca-files-doc
 %patch18 -p1 -b .imklog-heap
+%patch19 -p1 -b .cstrlen
+%patch20 -p1 -b .es0
+%patch21 -p1 -b .es1
+%patch22 -p1 -b .es2
+%patch23 -p1 -b .es3
+%patch24 -p1 -b .es4
+%patch25 -p1 -b .es5
+%patch26 -p1 -b .es6
+%patch27 -p1 -b .es-doc
 
 %build
 %ifarch sparc64
@@ -554,6 +571,19 @@ done
 %{_libdir}/rsyslog/omudpspoof.so
 
 %changelog
+* Thu May 11 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15
+- omelasticsearch: make compatible with elasticsearch>=8
+- add new action specific parameter esversion.major
+  resolves: rhbz#2192955
+
+* Tue May 09 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-14
+- Fix wrong type conversion in cstrLen()
+  resolves: rhbz#2157804
+- imjournal: by default retrieves _PID from journal as PID number
+  resolves: rhbz#2176398
+- Systemd service file hardening
+  resolves: rhbz#2176404
+
 * Mon Jan 09 2023 Attila Lakatos <alaktos@redhat.com> - 8.2102.0-13
 - Make rsyslog-relp require librelp>= 1.9.0
   resolves: rhbz#2029352

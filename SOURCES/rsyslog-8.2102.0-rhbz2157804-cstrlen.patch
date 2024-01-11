@@ -1,0 +1,72 @@
+diff -up rsyslog-8.2102.0/parse.h.orig rsyslog-8.2102.0/parse.h
+--- rsyslog-8.2102.0/parse.h.orig	2023-05-09 09:10:09.236597063 +0200
++++ rsyslog-8.2102.0/parse.h	2023-05-09 09:10:26.913608034 +0200
+@@ -56,7 +56,7 @@ struct rsParsObject
+ 	rsObjID OID;			/**< object ID */
+ #endif
+ 	cstr_t *pCStr;		/**< pointer to the string object we are parsing */
+-	int iCurrPos;			/**< current parsing position (char offset) */
++	size_t iCurrPos;			/**< current parsing position (char offset) */
+ };
+ typedef struct rsParsObject rsParsObj;
+ 
+diff -up rsyslog-8.2102.0/runtime/stream.c.orig rsyslog-8.2102.0/runtime/stream.c
+--- rsyslog-8.2102.0/runtime/stream.c.orig	2023-05-09 09:10:34.122612508 +0200
++++ rsyslog-8.2102.0/runtime/stream.c	2023-05-09 09:12:47.934640583 +0200
+@@ -1071,7 +1071,7 @@ strmReadMultiLine(strm_t *pThis, cstr_t
+ 	cstr_t *thisLine = NULL;
+ 	rsRetVal readCharRet;
+ 	const time_t tCurr = pThis->readTimeout ? getTime(NULL) : 0;
+-	int maxMsgSize = glblGetMaxLine();
++	size_t maxMsgSize = glblGetMaxLine();
+ 	DEFiRet;
+ 
+ 	do {
+@@ -1132,9 +1132,9 @@ strmReadMultiLine(strm_t *pThis, cstr_t
+ 					}
+ 
+ 
+-					int currLineLen = cstrLen(thisLine);
++					size_t currLineLen = cstrLen(thisLine);
+ 					if(currLineLen > 0) {
+-						int len;
++						size_t len;
+ 						if((len = cstrLen(pThis->prevMsgSegment) + currLineLen) <
+ 						maxMsgSize) {
+ 							CHKiRet(cstrAppendCStr(pThis->prevMsgSegment, thisLine));
+@@ -1144,7 +1144,7 @@ strmReadMultiLine(strm_t *pThis, cstr_t
+ 								len = 0;
+ 							} else {
+ 								len = currLineLen-(len-maxMsgSize);
+-								for(int z=0; z<len; z++) {
++								for(size_t z=0; z<len; z++) {
+ 									cstrAppendChar(pThis->prevMsgSegment,
+ 										thisLine->pBuf[z]);
+ 								}
+diff -up rsyslog-8.2102.0/runtime/stringbuf.c.orig rsyslog-8.2102.0/runtime/stringbuf.c
+--- rsyslog-8.2102.0/runtime/stringbuf.c.orig	2023-05-09 09:09:37.627577446 +0200
++++ rsyslog-8.2102.0/runtime/stringbuf.c	2023-05-09 09:09:59.061590749 +0200
+@@ -474,7 +474,7 @@ finalize_it:
+  * This is due to performance reasons.
+  */
+ #ifndef NDEBUG
+-int cstrLen(cstr_t *pThis)
++size_t cstrLen(cstr_t *pThis)
+ {
+ 	rsCHECKVALIDOBJECT(pThis, OIDrsCStr);
+ 	return(pThis->iStrLen);
+diff -up rsyslog-8.2102.0/runtime/stringbuf.h.orig rsyslog-8.2102.0/runtime/stringbuf.h
+--- rsyslog-8.2102.0/runtime/stringbuf.h.orig	2023-05-09 09:08:05.199520082 +0200
++++ rsyslog-8.2102.0/runtime/stringbuf.h	2023-05-09 09:09:26.924570803 +0200
+@@ -144,9 +144,9 @@ rsRetVal cstrAppendCStr(cstr_t *pThis, c
+ 
+ /* now come inline-like functions */
+ #ifdef NDEBUG
+-#	define cstrLen(x) ((int)((x)->iStrLen))
++#	define cstrLen(x) ((size_t)((x)->iStrLen))
+ #else
+-	int cstrLen(cstr_t *pThis);
++	size_t cstrLen(cstr_t *pThis);
+ #endif
+ #define rsCStrLen(s) cstrLen((s))
+ 

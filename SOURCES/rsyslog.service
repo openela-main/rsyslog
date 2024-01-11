@@ -13,6 +13,18 @@ ExecStart=/usr/sbin/rsyslogd -n $SYSLOGD_OPTIONS
 UMask=0066
 StandardOutput=null
 Restart=on-failure
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=net
+NoNewPrivileges=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@clock @debug @module @raw-io @reboot @swap @cpu-emulation @obsolete
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
 
 # Increase the default a bit in order to allow many simultaneous
 # files to be monitored, we might need a lot of fds.
