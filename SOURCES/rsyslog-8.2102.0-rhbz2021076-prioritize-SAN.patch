@@ -1,0 +1,11 @@
+diff -up ./rsyslog-8.2102.0/runtime/nsd_gtls.c.ori ./rsyslog-8.2102.0/runtime/nsd_gtls.c
+--- rsyslog-8.2102.0/runtime/nsd_gtls.c.ori	2022-01-17 15:50:08.285827256 +0100
++++ rsyslog-8.2102.0/runtime/nsd_gtls.c	2022-01-17 15:52:33.282594512 +0100
+@@ -1791,6 +1791,7 @@ AcceptConnReq(nsd_t *pNsd, nsd_t **ppNew
+ 	pNew->gnutlsPriorityString = pThis->gnutlsPriorityString;
+ 	pNew->DrvrVerifyDepth = pThis->DrvrVerifyDepth;
+ 	pNew->dataTypeCheck = pThis->dataTypeCheck;
++	pNew->bSANpriority = pThis->bSANpriority;
+ 
+ 	/* if we reach this point, we are in TLS mode */
+ 	iRet = gtlsInitSession(pNew);

@@ -1,0 +1,195 @@
+diff -up rsyslog-8.2102.0/configure.ac.orig rsyslog-8.2102.0/configure.ac
+--- rsyslog-8.2102.0/configure.ac.orig	2022-11-21 11:39:40.717183684 +0100
++++ rsyslog-8.2102.0/configure.ac	2022-11-21 11:40:18.697206706 +0100
+@@ -387,6 +387,28 @@ if test "$enable_fmhash_xxhash" = "yes";
+ 	])
+ fi
+ 
++AC_ARG_ENABLE(libcap-ng,
++        [AS_HELP_STRING([--enable-libcap-ng],[Enable dropping capabilities to only the necessary set @<:@default=no@:>@])],
++        [case "${enableval}" in
++         yes) enable_libcapng="yes" ;;
++          no) enable_libcapng="no" ;;
++           *) AC_MSG_ERROR(bad value ${enableval} for --enable_libcapng) ;;
++         esac],
++        [enable_libcapng=no]
++)
++
++if test "$enable_libcapng" = "yes"; then
++        PKG_CHECK_MODULES(
++                [LIBCAPNG],
++                [libcap-ng >= 0.8.2],
++                [AC_DEFINE([ENABLE_LIBCAPNG], [1], [Indicator that libcap-ng is present])],
++                [AC_MSG_ERROR(libcap-ng is not present.)]
++        )
++        CFLAGS="$CFLAGS $LIBCAPNG_CFLAGS"
++        LIBS="$LIBS $LIBCAPNG_LIBS"
++fi
++
++
+ 
+ #gssapi
+ AC_ARG_ENABLE(gssapi_krb5,
+@@ -2688,6 +2710,7 @@ echo "    liblogging-stdlog support enab
+ echo "    libsystemd enabled:                       $enable_libsystemd"
+ echo "    kafka static linking enabled:             $enable_kafka_static"
+ echo "    atomic operations enabled:                $enable_atomic_operations"
++echo "    libcap-ng support enabled:                $enable_libcapng"
+ echo
+ echo "---{ input plugins }---"
+ if test "$unamestr" != "AIX"; then
+diff -up rsyslog-8.2102.0/runtime/rsconf.c.orig rsyslog-8.2102.0/runtime/rsconf.c
+--- rsyslog-8.2102.0/runtime/rsconf.c.orig	2022-11-21 11:40:31.926214720 +0100
++++ rsyslog-8.2102.0/runtime/rsconf.c	2022-11-21 11:44:26.742356979 +0100
+@@ -33,6 +33,9 @@
+ #include <sys/resource.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#ifdef ENABLE_LIBCAPNG
++	#include <cap-ng.h>
++#endif
+ 
+ #include "rsyslog.h"
+ #include "obj.h"
+@@ -546,6 +549,7 @@ rsRetVal doDropPrivGid(void)
+ 	uchar szBuf[1024];
+ 	DEFiRet;
+ 
++#ifndef ENABLE_LIBCAPNG
+ 	if(!ourConf->globals.gidDropPrivKeepSupplemental) {
+ 		res = setgroups(0, NULL); /* remove all supplemental group IDs */
+ 		if(res) {
+@@ -560,9 +564,19 @@ rsRetVal doDropPrivGid(void)
+ 	if(res) {
+ 		rs_strerror_r(errno, (char*)szBuf, sizeof(szBuf));
+ 		LogError(0, RS_RET_ERR_DROP_PRIV,
+-				"could not set requested group id: %s", szBuf);
++				"could not set requested group id: %s via setgid()", szBuf);
+ 		ABORT_FINALIZE(RS_RET_ERR_DROP_PRIV);
+ 	}
++#else
++	int capng_flags = ourConf->globals.gidDropPrivKeepSupplemental ? CAPNG_NO_FLAG : CAPNG_DROP_SUPP_GRP;
++	res = capng_change_id(-1, ourConf->globals.gidDropPriv, capng_flags);
++	if (res) {
++		LogError(0, RS_RET_LIBCAPNG_ERR,
++				"could not set requested group id %d via capng_change_id()", ourConf->globals.gidDropPriv);
++		ABORT_FINALIZE(RS_RET_LIBCAPNG_ERR);
++	}
++#endif
++
+ 	DBGPRINTF("setgid(%d): %d\n", ourConf->globals.gidDropPriv, res);
+ 	snprintf((char*)szBuf, sizeof(szBuf), "rsyslogd's groupid changed to %d",
+ 		 ourConf->globals.gidDropPriv);
+@@ -599,7 +613,14 @@ static void doDropPrivUid(int iUid)
+ 				iUid, szBuf);
+ 	}
+ 
++#ifndef ENABLE_LIBCAPNG
+ 	res = setuid(iUid);
++	// res = setuid(cnf->globals.uidDropPriv);
++#else
++	int capng_flags = ourConf->globals.gidDropPrivKeepSupplemental ? CAPNG_NO_FLAG : CAPNG_DROP_SUPP_GRP;
++	res = capng_change_id(iUid, -1, capng_flags);
++#endif
++
+ 	if(res) {
+ 		/* if we can not set the userid, this is fatal, so let's unconditionally abort */
+ 		perror("could not set requested userid");
+diff -up rsyslog-8.2102.0/runtime/rsyslog.h.orig rsyslog-8.2102.0/runtime/rsyslog.h
+--- rsyslog-8.2102.0/runtime/rsyslog.h.orig	2022-11-21 11:45:09.007382588 +0100
++++ rsyslog-8.2102.0/runtime/rsyslog.h	2022-11-21 11:45:31.333396112 +0100
+@@ -582,6 +582,7 @@ enum rsRetVal_				/** return value. All
+ 	RS_RET_RABBITMQ_CHANNEL_ERR = -2449, /**< RabbitMQ Connection error */
+ 	RS_RET_NO_WRKDIR_SET = -2450, /**< working directory not set, but desired by functionality */
+ 	RS_RET_ERR_QUEUE_FN_DUP = -2451, /**< duplicate queue file name */
++	RS_RET_LIBCAPNG_ERR = -2455, /**< error during dropping the capabilities */
+ 
+ 	/* RainerScript error messages (range 1000.. 1999) */
+ 	RS_RET_SYSVAR_NOT_FOUND = 1001, /**< system variable could not be found (maybe misspelled) */
+diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.c
+--- rsyslog-8.2102.0/tools/rsyslogd.c.orig	2022-11-21 11:45:17.587387786 +0100
++++ rsyslog-8.2102.0/tools/rsyslogd.c	2022-11-21 11:46:19.509425295 +0100
+@@ -38,6 +38,10 @@
+ #	include <systemd/sd-daemon.h>
+ #endif
+ 
++#ifdef ENABLE_LIBCAPNG
++	#include <cap-ng.h>
++#endif
++
+ #include "rsyslog.h"
+ #include "wti.h"
+ #include "ratelimit.h"
+@@ -321,7 +325,7 @@ checkStartupOK(void)
+ 		fprintf(stderr, "rsyslogd: error reading pid file, cannot start up\n");
+ 		ABORT_FINALIZE(RS_RET_ERR);
+ 	}
+-	
++
+ 	/* ok, we got a pid, let's check if the process is running */
+ 	const pid_t pid = (pid_t) pf_pid;
+ 	if(kill(pid, 0) == 0 || errno != ESRCH) {
+@@ -1594,7 +1598,7 @@ initAll(int argc, char **argv)
+ 		localRet = RS_RET_OK;
+ 	}
+ 	CHKiRet(localRet);
+-	
++
+ 	CHKiRet(rsyslogd_InitStdRatelimiters());
+ 
+ 	if(bChDirRoot) {
+@@ -2019,7 +2023,7 @@ deinitAll(void)
+ 	/* close the inputs */
+ 	DBGPRINTF("Terminating input threads...\n");
+ 	glbl.SetGlobalInputTermination();
+-	
++
+ 	thrdTerminateAll();
+ 
+ 	/* and THEN send the termination log message (see long comment above) */
+@@ -2142,6 +2146,45 @@ main(int argc, char **argv)
+ 	if(log_dflt != NULL && !strcmp(log_dflt, "1"))
+ 		bProcessInternalMessages = 1;
+ 	dbgClassInit();
++
++#ifdef ENABLE_LIBCAPNG
++	/*
++	 * Drop capabilities to the necessary set
++	 */
++	int capng_rc;
++	capng_clear(CAPNG_SELECT_BOTH);
++
++	if ((capng_rc = capng_updatev(CAPNG_ADD, CAPNG_EFFECTIVE|CAPNG_PERMITTED,
++		CAP_BLOCK_SUSPEND,
++		CAP_CHOWN,
++		CAP_IPC_LOCK,
++		CAP_LEASE,
++		CAP_NET_ADMIN,
++		CAP_NET_BIND_SERVICE,
++		CAP_PERFMON,
++		CAP_SETGID,
++		CAP_SETUID,
++		CAP_SYS_ADMIN,
++		CAP_SYS_CHROOT,
++		CAP_SYS_RESOURCE,
++		CAP_SYSLOG,
++		-1
++	)) != 0) {
++		LogError(0, RS_RET_LIBCAPNG_ERR,
++				"could not update the internal posix capabilities settings "
++				"based on the options passed to it, capng_updatev=%d\n", capng_rc);
++		exit(-1);
++	}
++
++	if ((capng_rc = capng_apply(CAPNG_SELECT_BOTH)) != 0) {
++		LogError(0, RS_RET_LIBCAPNG_ERR,
++			"could not transfer  the  specified  internal posix  capabilities "
++			"settings to the kernel, capng_apply=%d\n", capng_rc);
++		exit(-1);
++	}
++	DBGPRINTF("Capabilities were dropped successfully\n");
++#endif
++
+ 	initAll(argc, argv);
+ #ifdef HAVE_LIBSYSTEMD
+ 	sd_notify(0, "READY=1");

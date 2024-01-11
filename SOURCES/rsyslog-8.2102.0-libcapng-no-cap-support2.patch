@@ -1,0 +1,11 @@
+diff -up rsyslog-8.2102.0/tools/rsyslogd.c.orig rsyslog-8.2102.0/tools/rsyslogd.c
+--- rsyslog-8.2102.0/tools/rsyslogd.c.orig	2023-07-28 10:58:34.763191141 +0200
++++ rsyslog-8.2102.0/tools/rsyslogd.c	2023-07-28 10:59:14.867276818 +0200
+@@ -1571,6 +1571,7 @@ initAll(int argc, char **argv)
+ 	capabilities_t capabilities[] = {
+ 		#define CAP_FIELD(code) { code, #code,  0 }
+ 		CAP_FIELD(CAP_BLOCK_SUSPEND),
++		CAP_FIELD(CAP_NET_RAW),
+ 		CAP_FIELD(CAP_CHOWN),
+ 		CAP_FIELD(CAP_IPC_LOCK),
+ 		CAP_FIELD(CAP_LEASE),
