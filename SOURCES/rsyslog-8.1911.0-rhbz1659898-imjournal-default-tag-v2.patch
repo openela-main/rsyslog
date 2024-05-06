@@ -1,7 +1,7 @@
-diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjournal.c
---- ./plugins/imjournal/imjournal.c.default-tag	2018-05-17 08:50:11.416418022 -0400
-+++ ./plugins/imjournal/imjournal.c	2018-05-17 08:53:02.884418022 -0400
-@@ -78,6 +78,7 @@ static struct configSettings_s {
+diff -up rsyslog-8.2310.0/plugins/imjournal/imjournal.c.orig rsyslog-8.2310.0/plugins/imjournal/imjournal.c
+--- rsyslog-8.2310.0/plugins/imjournal/imjournal.c.orig	2023-10-10 16:42:39.771369418 +0200
++++ rsyslog-8.2310.0/plugins/imjournal/imjournal.c	2023-10-10 16:51:39.839133580 +0200
+@@ -87,6 +87,7 @@ static struct configSettings_s {
  	int bWorkAroundJournalBug; /* deprecated, left for backwards compatibility only */
  	int bFsync;
  	int bRemote;
@@ -9,7 +9,7 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  } cs;
  
  static rsRetVal facilityHdlr(uchar **pp, void *pVal);
-@@ -93,7 +94,8 @@ static struct cnfparamdescr modpdescr[]
+@@ -106,7 +107,8 @@ static struct cnfparamdescr modpdescr[]
  	{ "usepid", eCmdHdlrString, 0 },
  	{ "workaroundjournalbug", eCmdHdlrBinary, 0 },
  	{ "fsync", eCmdHdlrBinary, 0 },
@@ -19,7 +19,7 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  };
  static struct cnfparamblk modpblk =
  	{ CNFPARAMBLK_VERSION,
-@@ -104,6 +106,7 @@ static struct cnfparamblk modpblk =
+@@ -117,6 +119,7 @@ static struct cnfparamblk modpblk =
  #define DFLT_persiststateinterval 10
  #define DFLT_SEVERITY pri2sev(LOG_NOTICE)
  #define DFLT_FACILITY pri2fac(LOG_USER)
@@ -27,37 +27,27 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  
  static int bLegacyCnfModGlobalsPermitted = 1;/* are legacy module-global config parameters permitted? */
  
-@@ -268,7 +271,7 @@ readjournal(void)
- 
- 	/* Information from messages */
- 	char *message = NULL;
--	char *sys_iden;
-+	char *sys_iden = NULL;
- 	char *sys_iden_help = NULL;
- 
- 	const void *get;
-@@ -331,7 +334,7 @@ readjournal(void)
- 	if (journalGetData("SYSLOG_IDENTIFIER", &get, &length) >= 0) {
- 		CHKiRet(sanitizeValue(((const char *)get) + 18, length - 18, &sys_iden));
+@@ -458,7 +461,7 @@ readjournal(void)
+ 	} else if (journalGetData("_COMM", &get, &length) >= 0) {
+ 		CHKiRet(sanitizeValue(((const char *)get) + 6, length - 6, &sys_iden));
  	} else {
 -		CHKmalloc(sys_iden = strdup("journal"));
 +		CHKmalloc(sys_iden = strdup(cs.dfltTag));
  	}
  
  	/* trying to get PID, default is "SYSLOG_PID" property */
-@@ -654,6 +657,11 @@ CODESTARTrunInput
- 			"\"usepidfromsystem\" is depricated, use \"usepid\" instead");
+@@ -826,6 +829,10 @@ CODESTARTrunInput
+ 			"\"usepidfromsystem\" is deprecated, use \"usepid\" instead");
  	}
  
 +	if (cs.dfltTag == NULL) {
 +		cs.dfltTag = strdup(DFLT_TAG);
 +	}
 +
-+
  	if (cs.usePid && (strcmp(cs.usePid, "system") == 0)) {
  		pidFieldName = "_PID";
  		bPidFallBack = 0;
-@@ -732,6 +740,7 @@ CODESTARTbeginCnfLoad
+@@ -914,6 +921,7 @@ CODESTARTbeginCnfLoad
  	cs.bWorkAroundJournalBug = 1;
  	cs.bFsync = 0;
  	cs.bRemote = 0;
@@ -65,7 +55,7 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  ENDbeginCnfLoad
  
  
-@@ -754,6 +763,7 @@ BEGINfreeCnf
+@@ -983,6 +991,7 @@ BEGINfreeCnf
  CODESTARTfreeCnf
  	free(cs.stateFile);
  	free(cs.usePid);
@@ -73,7 +63,7 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  	free(journalContext.cursor);
  	statsobj.Destruct(&(statsCounter.stats));
  ENDfreeCnf
-@@ -832,6 +842,8 @@ CODESTARTsetModCnf
+@@ -1077,6 +1086,8 @@ CODESTARTsetModCnf
  			cs.bFsync = (int) pvals[i].val.d.n;
  		} else if (!strcmp(modpblk.descr[i].name, "remote")) {
  			cs.bRemote = (int) pvals[i].val.d.n;
@@ -82,7 +72,7 @@ diff -up ./plugins/imjournal/imjournal.c.default-tag ./plugins/imjournal/imjourn
  		} else {
  			dbgprintf("imjournal: program error, non-handled "
  				"param '%s' in beginCnfLoad\n", modpblk.descr[i].name);
-@@ -799,6 +820,8 @@ CODEmodInit_QueryRegCFSLineHdlr
+@@ -1144,6 +1155,8 @@ CODEmodInit_QueryRegCFSLineHdlr
  		facilityHdlr, &cs.iDfltFacility, STD_LOADABLE_MODULE_ID));
  	CHKiRet(omsdRegCFSLineHdlr((uchar *)"imjournalusepidfromsystem", 0, eCmdHdlrBinary,
  		NULL, &cs.bUseJnlPID, STD_LOADABLE_MODULE_ID));

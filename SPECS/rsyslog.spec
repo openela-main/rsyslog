@@ -4,8 +4,8 @@
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2102.0
-Release: 117%{?dist}
+Version: 8.2310.0
+Release: 4%{?dist}
 License: (GPLv3+ and ASL 2.0)
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -18,38 +18,12 @@ Source5: rsyslog.service
 # separatae sub-package with it statically linked(see rhbz#1713427)
 Source6: qpid-proton-0.39.0.tar.gz
 
-Patch0:  rsyslog-8.2102.0-rhbz2064318-errfile-maxsize-doc.patch
-Patch1:  rsyslog-8.1911.0-rhbz1659898-imjournal-default-tag.patch
-Patch2:  rsyslog-8.2102.0-rhbz1960536-fdleak-on-fsync.patch
-Patch3:  rsyslog-8.2102.0-rhbz1886400-reduce-default-timeout.patch
-Patch4:  rsyslog-8.2102.0-rhbz1984616-imuxsock-ratelimit.patch
-Patch5:  rsyslog-8.2102.0-rhbz1984489-remove-abort-on-id-resolution-fail.patch
-Patch6:  rsyslog-8.2102.0-rhbz1938863-covscan.patch
-Patch7:  rsyslog-8.2102.0-rhbz2021076-prioritize-SAN.patch
-Patch8:  rsyslog-8.2102.0-rhbz2064318-errfile-maxsize.patch
-Patch10: rsyslog-8.2102.0-rhbz1909639-statefiles-fix.patch
-Patch11: rsyslog-8.2102.0-rhbz1909639-statefiles-doc.patch
-Patch12: rsyslog-8.2102.0-rhbz2046158-gnutls-broken-connection.patch
-Patch13: rsyslog-8.37.0-rhbz2081396-CVE-2022-24903.patch
-Patch14: rsyslog-8.2102.0-rhbz2124849-extra-ca-files.patch
-Patch15: rsyslog-8.2102.0-rhbz2124849-extra-ca-files-doc.patch
-Patch16: rsyslog-8.2102.0-rhbz2127404-libcap-ng.patch
-Patch17: rsyslog-8.2102.0-rhbz2157658-imklog.patch
-Patch18: rsyslog-8.2102.0-capabilities-drop-credential.patch
-Patch19: rsyslog-8.2102.0-capabilities-capnetraw.patch
-Patch20: rsyslog-8.2102.0-rhbz2157804-cstrlen.patch
-Patch21: rsyslog-8.2102.0-rhbz2129015-journal-COMM.patch
-Patch22: rsyslog-8.2102.0-rhbz2192955-es-0.patch
-Patch23: rsyslog-8.2102.0-rhbz2192955-es-1.patch
-Patch24: rsyslog-8.2102.0-rhbz2192955-es-2.patch
-Patch25: rsyslog-8.2102.0-rhbz2192955-es-3.patch
-Patch26: rsyslog-8.2102.0-rhbz2192955-es-4.patch
-Patch27: rsyslog-8.2102.0-rhbz2192955-es-5.patch
-Patch28: rsyslog-8.2102.0-rhbz2192955-es-6.patch
-Patch29: rsyslog-8.2102.0-rhbz2192955-es-doc.patch
-Patch30: rsyslog-8.2102.0-rhbz2216919-libcapng-default.patch
-Patch31: rsyslog-8.2102.0-rhbz2216919-libcapng-no-drop.patch
-Patch32: rsyslog-8.2102.0-libcapng-no-cap-support2.patch
+Patch1: rsyslog-8.1911.0-rhbz1659898-imjournal-default-tag-v2.patch
+Patch2: rsyslog-8.2102.0-rhbz1886400-reduce-default-timeout.patch
+Patch3: rsyslog-8.2310.0-do-not-preserve-statefile-on-file-move.patch
+Patch4: rsyslog-8.2310.0-do-not-preserve-statefile-on-file-move-doc.patch
+Patch5: rsyslog-8.2310.0-remove-state-on-file-delete.patch
+Patch6: rsyslog-8.2310.0-omprog-binary-path.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -70,7 +44,7 @@ BuildRequires: systemd-devel >= 204-8
 BuildRequires: zlib-devel
 BuildRequires: libcap-ng-devel
 
-Conflicts: selinux-policy < 38.1.3-1
+Conflicts: selinux-policy < 38.1.29-1
 
 Recommends: %{name}-logrotate = %version-%release
 Requires: bash >= 2.0
@@ -278,7 +252,6 @@ container metadata.
 %prep
 # set up rsyslog-doc sources
 %setup -q -a 1 -T -c
-%patch0 -p1
 
 rm -r LICENSE README.md source build/objects.inv
 mv build doc
@@ -287,37 +260,12 @@ mv build doc
 # Unpack qpid-proton for rhel
 %setup -q -D -T -b 6
 
-%patch1  -p1 -b .default-tag
-%patch2  -p1 -b .fd-leak-on-fsync
-%patch3  -p1 -b .timeout
-%patch4  -p1 -b .imuxsock-rate-limit
-%patch5  -p1 -b .abort-on-id-resolution-fail
-%patch6  -p1 -b .covscan
-%patch7  -p1 -b .prioritize-SAN
-%patch8  -p1 -b .errfile-maxsize
-%patch10 -p1 -b .statefile-fix
-%patch11 -p1
-%patch12 -p1 -b .gnutls-broken-connection
-%patch13 -p1 -b .CVE
-%patch14 -p1 -b .extra-ca-files
-%patch15 -p1 -b .extra-ca-files-doc
-%patch16 -p1 -b .libcap-ng
-%patch17 -p1 -b .imklog-leak
-%patch18 -p1 -b .capabilities-drop-credential
-%patch19 -p1 -b .capabilities-capnetraw
-%patch20 -p1 -b .cstrlen
-%patch21 -p1 -b .journalCOMM
-%patch22 -p1 -b .es0
-%patch23 -p1 -b .es1
-%patch24 -p1 -b .es2
-%patch25 -p1 -b .es3
-%patch26 -p1 -b .es4
-%patch27 -p1 -b .es5
-%patch28 -p1 -b .es6
-%patch29 -p1 -b .es-doc
-%patch30 -p1
-%patch31 -p1
-%patch32 -p1
+%patch -P 1 -p1
+%patch -P 2 -p1
+%patch -P 3 -p1
+%patch -P 4 -p1
+%patch -P 5 -p1
+%patch -P 6 -p1
 
 %build
 # Add additional flags as per https://one.redhat.com/rhel-developer-guide/#_what_are_the_required_flags
@@ -422,6 +370,7 @@ install -d -m 755 %{buildroot}%{_sysconfdir}/rsyslog.d
 install -d -m 700 %{buildroot}%{rsyslog_statedir}
 install -d -m 700 %{buildroot}%{rsyslog_pkidir}
 install -d -m 755 %{buildroot}%{rsyslog_docdir}/html
+install -d -m 755 %{buildroot}%{_libexecdir}/%{name}
 
 install -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/rsyslog.conf
 install -p -m 644 %{SOURCE3} %{buildroot}%{_sysconfdir}/sysconfig/rsyslog
@@ -466,6 +415,7 @@ done
 %dir %{_sysconfdir}/rsyslog.d
 %dir %{rsyslog_statedir}
 %dir %{rsyslog_pkidir}
+%dir %{_libexecdir}/%{name}
 %{_sbindir}/rsyslogd
 %{_mandir}/man5/rsyslog.conf.5.gz
 %{_mandir}/man8/rsyslogd.8.gz
@@ -579,6 +529,24 @@ done
 
 
 %changelog
+* Tue Dec 12 2023 Attila Lakatos <alakatos@redhat.com> - 8.2310.0-4
+- new directory for arbitrary external programs needed by omprog module
+  Resolves: RHEL-8676
+
+* Mon Nov 06 2023 Attila Lakatos <alakatos@redhat.com> - 8.2310.0-3
+- Rebase to 8.2310.0
+  Resolves: RHEL-5196
+- Allow setting certificates for separate connections
+  Resolves: RHEL-937
+- Capability dropping feature can be turned off
+  Resolves: RHEL-943
+- imjournal: new module parameter filecreatemode
+  Resolves: RHEL-949
+
+* Wed Sep 06 2023 Patrik Koncity <pkoncity@redhat.com> - 8.2102.0-118
+- Add rsyslog CI for new MR in c9s
+  Resolves: RHEL-608
+
 * Fri Jul 28 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-117
 - Add back CAP_NET_RAW capability due to omudpspoof
   resolves: rhbz#2216919
