@@ -1,0 +1,11 @@
+diff -up rsyslog-8.2102.0/runtime/nsd_ossl.c.orig rsyslog-8.2102.0/runtime/nsd_ossl.c
+--- rsyslog-8.2102.0/runtime/nsd_ossl.c.orig	2024-08-26 15:27:50.528691153 +0200
++++ rsyslog-8.2102.0/runtime/nsd_ossl.c	2024-08-26 15:28:06.950855632 +0200
+@@ -1544,6 +1544,7 @@ AcceptConnReq(nsd_t *pNsd, nsd_t **ppNew
+ 	pNew->permitExpiredCerts = pThis->permitExpiredCerts;
+ 	pNew->pPermPeers = pThis->pPermPeers;
+ 	pNew->DrvrVerifyDepth = pThis->DrvrVerifyDepth;
++	pNew->gnutlsPriorityString = pThis->gnutlsPriorityString;
+ 	CHKiRet(osslInitSession(pNew, osslServer));
+ 
+ 	/* Store nsd_ossl_t* reference in SSL obj */

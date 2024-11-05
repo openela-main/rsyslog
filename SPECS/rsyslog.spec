@@ -6,7 +6,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2102.0
-Release: 15%{?dist}
+Release: 15%{?dist}.1
 License: (GPLv3+ and ASL 2.0)
 Group: System Environment/Daemons
 ExcludeArch: i686
@@ -76,6 +76,7 @@ Patch24: rsyslog-8.2102.0-rhbz2192955-es-4.patch
 Patch25: rsyslog-8.2102.0-rhbz2192955-es-5.patch
 Patch26: rsyslog-8.2102.0-rhbz2192955-es-6.patch
 Patch27: rsyslog-8.2102.0-rhbz2192955-es-doc.patch
+Patch28: propagate-gnutlsPriorityString.patch
 
 %package crypto
 Summary: Encryption support
@@ -299,34 +300,35 @@ mv build doc
 %setup -q -D
 %setup -q -D -T -b 5
 
-%patch0  -p1 -b .default-tag
-%patch1  -p1 -b .fd-leak-on-fsync
-%patch2  -p1 -b .timeout
-%patch3  -p1 -b .unexpected-priority-length
-%patch4  -p1 -b .imuxsock-rate-limit
-%patch5  -p1 -b .abort-on-id-resolution-fail
-%patch6  -p1 -b .prioritizeSAN
-%patch7  -p1 -b .errfile-maxsize
-%patch8  -p1 -b .state-file-leaking
-%patch9  -p1 -b .state-file-leaking-doc
-%patch10 -p1 -b .ossl-better-logs
-%patch11 -p1 -b .imtcp-refactor-params
-%patch12 -p1 -b .ossl-memory-leak
-%patch13 -p1 -b .ossl-ciphers-behaviour
-%patch14 -p1 -b .CVE-24903
-%patch15 -p1 -b .gnutls-error-handling
-%patch16 -p1 -b .extra-ca-files
-%patch17 -p1 -b .extra-ca-files-doc
-%patch18 -p1 -b .imklog-heap
-%patch19 -p1 -b .cstrlen
-%patch20 -p1 -b .es0
-%patch21 -p1 -b .es1
-%patch22 -p1 -b .es2
-%patch23 -p1 -b .es3
-%patch24 -p1 -b .es4
-%patch25 -p1 -b .es5
-%patch26 -p1 -b .es6
-%patch27 -p1 -b .es-doc
+%patch -P 0 -p1
+%patch -P 1 -p1
+%patch -P 2 -p1
+%patch -P 3 -p1
+%patch -P 4 -p1
+%patch -P 5 -p1
+%patch -P 6 -p1
+%patch -P 7 -p1
+%patch -P 8 -p1
+%patch -P 9 -p1
+%patch -P 10 -p1
+%patch -P 11 -p1
+%patch -P 12 -p1
+%patch -P 13 -p1
+%patch -P 14 -p1
+%patch -P 15 -p1
+%patch -P 16 -p1
+%patch -P 17 -p1
+%patch -P 18 -p1
+%patch -P 19 -p1
+%patch -P 20 -p1
+%patch -P 21 -p1
+%patch -P 22 -p1
+%patch -P 23 -p1
+%patch -P 24 -p1
+%patch -P 25 -p1
+%patch -P 26 -p1
+%patch -P 27 -p1
+%patch -P 28 -p1
 
 %build
 %ifarch sparc64
@@ -571,6 +573,10 @@ done
 %{_libdir}/rsyslog/omudpspoof.so
 
 %changelog
+* Mon Aug 26 2024 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15.1
+- Propagate gnutlsPriorityString when accepting new connection
+  resolves: RHEL-54663
+
 * Thu May 11 2023 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15
 - omelasticsearch: make compatible with elasticsearch>=8
 - add new action specific parameter esversion.major
