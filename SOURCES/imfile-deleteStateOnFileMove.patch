@@ -1,0 +1,28 @@
+diff -up rsyslog-8.2412.0/plugins/imfile/imfile.c.orig rsyslog-8.2412.0/plugins/imfile/imfile.c
+--- rsyslog-8.2412.0/plugins/imfile/imfile.c.orig	2024-12-06 13:42:53.855126447 +0100
++++ rsyslog-8.2412.0/plugins/imfile/imfile.c	2024-12-06 13:44:43.990211090 +0100
+@@ -264,6 +264,7 @@ struct modConfData_s {
+ 				   Must be manually reset to 0 if desired. Helper for
+ 				   polling mode.
+ 				 */
++	sbool deleteStateOnFileMove;
+ };
+ static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
+ static modConfData_t *runModConf = NULL;/* modConf ptr to use for run process */
+@@ -2094,6 +2095,7 @@ CODESTARTbeginCnfLoad
+ 	loadModConf->timeoutGranularity = 1000; /* default: 1 second */
+ 	loadModConf->haveReadTimeouts = 0; /* default: no timeout */
+ 	loadModConf->normalizePath = 1;
++	loadModConf->deleteStateOnFileMove = 0;
+ 	loadModConf->sortFiles = GLOB_NOSORT;
+ 	loadModConf->stateFileDirectory = NULL;
+ 	loadModConf->conf_tree = calloc(1, sizeof(fs_node_t));
+@@ -2153,6 +2155,8 @@ CODESTARTsetModCnf
+ 			loadModConf->stateFileDirectory = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+ 		} else if(!strcmp(modpblk.descr[i].name, "normalizepath")) {
+ 			loadModConf->normalizePath = (sbool) pvals[i].val.d.n;
++		} else if(!strcmp(modpblk.descr[i].name, "deletestateonfilemove")) {
++			loadModConf->deleteStateOnFileMove = (sbool) pvals[i].val.d.n;
+ 		} else if(!strcmp(modpblk.descr[i].name, "mode")) {
+ 			if(!es_strconstcmp(pvals[i].val.d.estr, "polling"))
+ 				loadModConf->opMode = OPMODE_POLLING;

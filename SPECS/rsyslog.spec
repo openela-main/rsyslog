@@ -4,8 +4,8 @@
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2310.0
-Release: 4%{?dist}
+Version: 8.2412.0
+Release: 1%{?dist}
 License: (GPLv3+ and ASL 2.0)
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -18,12 +18,7 @@ Source5: rsyslog.service
 # separatae sub-package with it statically linked(see rhbz#1713427)
 Source6: qpid-proton-0.39.0.tar.gz
 
-Patch1: rsyslog-8.1911.0-rhbz1659898-imjournal-default-tag-v2.patch
-Patch2: rsyslog-8.2102.0-rhbz1886400-reduce-default-timeout.patch
-Patch3: rsyslog-8.2310.0-do-not-preserve-statefile-on-file-move.patch
-Patch4: rsyslog-8.2310.0-do-not-preserve-statefile-on-file-move-doc.patch
-Patch5: rsyslog-8.2310.0-remove-state-on-file-delete.patch
-Patch6: rsyslog-8.2310.0-omprog-binary-path.patch
+Patch0: imfile-deleteStateOnFileMove.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -257,15 +252,10 @@ rm -r LICENSE README.md source build/objects.inv
 mv build doc
 # set up rsyslog sources
 %setup -q -D
+%patch -P 0 -p1
+
 # Unpack qpid-proton for rhel
 %setup -q -D -T -b 6
-
-%patch -P 1 -p1
-%patch -P 2 -p1
-%patch -P 3 -p1
-%patch -P 4 -p1
-%patch -P 5 -p1
-%patch -P 6 -p1
 
 %build
 # Add additional flags as per https://one.redhat.com/rhel-developer-guide/#_what_are_the_required_flags
@@ -529,6 +519,19 @@ done
 
 
 %changelog
+* Fri Dec 06 2024 Attila Lakatos <alakatos@redhat.com> - 8.2412.0-1
+- Rebase to 8.2412.0
+  Resolves: RHEL-65177
+- Fix segfault when $ControlCharacterEscapePrefix is set
+  Resolves: RHEL-38222
+  Resolves: RHEL-70099
+- Fix segfault due to processing malform queue message
+  Resolves: RHEL-70100
+- Fix $ActionQueueDiscardMark default value to 80% queue size
+  Resolves: RHEL-70109
+- Fix crash on startup when an invalid function is specified
+  Resolves: RHEL-70111
+
 * Tue Dec 12 2023 Attila Lakatos <alakatos@redhat.com> - 8.2310.0-4
 - new directory for arbitrary external programs needed by omprog module
   Resolves: RHEL-8676
