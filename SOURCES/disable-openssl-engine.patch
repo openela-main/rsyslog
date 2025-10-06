@@ -1,0 +1,60 @@
+diff -up rsyslog-8.2412.0/runtime/net_ossl.c.orig rsyslog-8.2412.0/runtime/net_ossl.c
+--- rsyslog-8.2412.0/runtime/net_ossl.c.orig	2024-11-27 13:05:51.327988286 +0100
++++ rsyslog-8.2412.0/runtime/net_ossl.c	2024-11-27 13:06:26.806335104 +0100
+@@ -220,6 +220,7 @@ osslGlblInit(void)
+ 	ERR_load_crypto_strings();
+ #endif
+ 
++#ifdef ENABLE_OPENSSL_ENGINES_DOWNSTREAM
+ PRAGMA_DIAGNOSTIC_PUSH
+ PRAGMA_IGNORE_Wdeprecated_declarations
+ 
+@@ -244,6 +245,8 @@ PRAGMA_IGNORE_Wdeprecated_declarations
+ 	// Free the engine reference when done
+ 	ENGINE_free(osslEngine);
+ PRAGMA_DIAGNOSTIC_POP
++#endif
++
+ }
+ 
+ /* globally de-initialize OpenSSL */
+@@ -251,7 +254,9 @@ void
+ osslGlblExit(void)
+ {
+ 	DBGPRINTF("openssl: entering osslGlblExit\n");
++	#ifdef ENABLE_OPENSSL_ENGINES_DOWNSTREAM
+ 	ENGINE_cleanup();
++	#endif
+ 	ERR_free_strings();
+ 	EVP_cleanup();
+ 	CRYPTO_cleanup_all_ex_data();
+@@ -1149,6 +1154,7 @@ net_ossl_init_engine(__attribute__((unus
+ 	const char *engine_id = NULL;
+ 	const char *engine_name = NULL;
+ 
++#ifdef ENABLE_OPENSSL_ENGINES_DOWNSTREAM
+ PRAGMA_DIAGNOSTIC_PUSH
+ PRAGMA_IGNORE_Wdeprecated_declarations
+ 	// Get the default RSA engine
+@@ -1189,7 +1195,7 @@ PRAGMA_IGNORE_Wdeprecated_declarations
+ 		DBGPRINTF("net_ossl_init_engine: use openssl default Engine");
+ 	}
+ PRAGMA_DIAGNOSTIC_POP
+-
++#endif // ENABLE_OPENSSL_ENGINES_DOWNSTREAM
+ 	RETiRet;
+ }
+ 
+diff -up rsyslog-8.2412.0/runtime/net_ossl.h.orig rsyslog-8.2412.0/runtime/net_ossl.h
+--- rsyslog-8.2412.0/runtime/net_ossl.h.orig	2024-11-27 13:06:01.138084180 +0100
++++ rsyslog-8.2412.0/runtime/net_ossl.h	2024-11-27 13:06:30.536372456 +0100
+@@ -31,7 +31,9 @@
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(LIBRESSL_VERSION_NUMBER)
+ #	include <openssl/bioerr.h>
+ #endif
++#ifdef ENABLE_OPENSSL_ENGINES_DOWNSTREAM
+ #include <openssl/engine.h>
++#endif
+ #include <openssl/rand.h>
+ #include <openssl/evp.h>
+ 
