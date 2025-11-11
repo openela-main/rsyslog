@@ -1,0 +1,62 @@
+diff --git a/plugins/imdtls/imdtls.c b/plugins/imdtls/imdtls.c
+index f90e8ad61c..bfb63452c7 100644
+--- a/plugins/imdtls/imdtls.c
++++ b/plugins/imdtls/imdtls.c
+@@ -41,7 +41,9 @@
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(LIBRESSL_VERSION_NUMBER)
+ #	include <openssl/bioerr.h>
+ #endif
+-#include <openssl/engine.h>
++#ifndef OPENSSL_NO_ENGINE
++#       include <openssl/engine.h>
++#endif
+ // ---
+ 
+ #include "rsyslog.h"
+diff --git a/plugins/omdtls/omdtls.c b/plugins/omdtls/omdtls.c
+index 2b28908030..693ff99c77 100644
+--- a/plugins/omdtls/omdtls.c
++++ b/plugins/omdtls/omdtls.c
+@@ -52,7 +52,9 @@
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(LIBRESSL_VERSION_NUMBER)
+ #	include <openssl/bioerr.h>
+ #endif
+-#include <openssl/engine.h>
++#ifndef OPENSSL_NO_ENGINE
++#       include <openssl/engine.h>
++#endif
+ // ---
+ 
+ // Include rsyslog headers
+diff --git a/runtime/net_ossl.h b/runtime/net_ossl.h
+index af36ffe488..d66a422d4d 100644
+--- a/runtime/net_ossl.h
++++ b/runtime/net_ossl.h
+@@ -31,7 +31,9 @@
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(LIBRESSL_VERSION_NUMBER)
+ #	include <openssl/bioerr.h>
+ #endif
+-#include <openssl/engine.h>
++#ifndef OPENSSL_NO_ENGINE
++#       include <openssl/engine.h>
++#endif
+ #include <openssl/rand.h>
+ #include <openssl/evp.h>
+ 
+diff --git a/tests/tcpflood.c b/tests/tcpflood.c
+index 4b2d98b2c8..7322aeb135 100644
+--- a/tests/tcpflood.c
++++ b/tests/tcpflood.c
+@@ -129,8 +129,10 @@
+ #ifdef ENABLE_OPENSSL
+ 	#include <openssl/ssl.h>
+ 	#include <openssl/x509v3.h>
+-	#include <openssl/err.h>
+-	#include <openssl/engine.h>
++       #include <openssl/err.h>
++#       ifndef OPENSSL_NO_ENGINE
++#               include <openssl/engine.h>
++#       endif
+ 
+ 	/* OpenSSL API differences */
+ 	#if OPENSSL_VERSION_NUMBER >= 0x10100000L

@@ -1,12 +1,13 @@
 %define rsyslog_statedir %{_sharedstatedir}/rsyslog
 %define rsyslog_pkidir %{_sysconfdir}/pki/rsyslog
 %define rsyslog_docdir %{_docdir}/rsyslog
+%define qpid_proton_v 0.39.0
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2412.0
-Release: 1%{?dist}
-License: (GPLv3+ and ASL 2.0)
+Version: 8.2506.0
+Release: 2%{?dist}
+License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
 Source1: http://www.rsyslog.com/files/download/rsyslog/%{name}-doc-%{version}.tar.gz
@@ -16,9 +17,11 @@ Source4: rsyslog.log
 Source5: rsyslog.service
 # Add qpid-proton as another source, enable omamqp1 module in a
 # separatae sub-package with it statically linked(see rhbz#1713427)
-Source6: qpid-proton-0.39.0.tar.gz
+Source6: https://archive.apache.org/dist/qpid/proton/%{qpid_proton_v}/qpid-proton-%{qpid_proton_v}.tar.gz
+Source7: rsyslog-tmpfiles.conf
 
-Patch0: imfile-deleteStateOnFileMove.patch
+Patch0: openssl-disable-engines.patch
+Patch1: imfile-delete-state-on-file-move.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -253,6 +256,7 @@ mv build doc
 # set up rsyslog sources
 %setup -q -D
 %patch -P 0 -p1
+%patch -P 1 -p1
 
 # Unpack qpid-proton for rhel
 %setup -q -D -T -b 6
@@ -273,19 +277,18 @@ export CFLAGS="$RPM_OPT_FLAGS -fpic"
 %endif
 # build the proton first
 (
-	cd %{_builddir}/qpid-proton-0.39.0
+	cd %{_builddir}/qpid-proton-%{qpid_proton_v}
 	mkdir bld
 	cd bld
 
 	# Need ENABLE_FUZZ_TESTING=NO to avoid a link failure
-	# Find python include dir and python library from
-	# https://stackoverflow.com/questions/24174394/cmake-is-not-able-to-find-python-libraries
+	# Modern approach for Python discovery in CMake
 	cmake .. \
 		-DBUILD_BINDINGS="" \
 		-DBUILD_STATIC_LIBS=YES \
 		-DENABLE_FUZZ_TESTING=NO \
-		-DPYTHON_INCLUDE_DIR=$(python3 -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())")  \
-		-DPYTHON_LIBRARY=$(python3 -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))") \
+		-DPython_FIND_STRATEGY=LOCATION \
+		-DPython_ROOT_DIR=/usr \
 		-DCMAKE_AR="/usr/bin/gcc-ar" -DCMAKE_NM="/usr/bin/gcc-nm" -DCMAKE_RANLIB="/usr/bin/gcc-ranlib"
 	make -j8
 )
@@ -305,7 +308,7 @@ autoreconf -if
 	--prefix=/usr \
 	--disable-static \
 	--disable-testbench \
-	--enable-omamqp1 PROTON_LIBS="%{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-core-static.a %{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-proactor-static.a %{_builddir}/qpid-proton-0.39.0/bld/c/libqpid-proton-static.a -lssl -lsasl2 -lcrypto" PROTON_CFLAGS="-I%{_builddir}/qpid-proton-0.39.0/bld/c/include" \
+	--enable-omamqp1 PROTON_PROACTOR_LIBS="%{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-core-static.a %{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-proactor-static.a %{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-static.a -lssl -lsasl2 -lcrypto" PROTON_PROACTOR_CFLAGS="-I%{_builddir}/qpid-proton-%{qpid_proton_v}/c/include -I%{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/include" PROTON_LIBS="%{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-core-static.a %{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-proactor-static.a %{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/libqpid-proton-static.a -lssl -lsasl2 -lcrypto" PROTON_CFLAGS="-I%{_builddir}/qpid-proton-%{qpid_proton_v}/c/include -I%{_builddir}/qpid-proton-%{qpid_proton_v}/bld/c/include" \
 	--enable-elasticsearch \
 	--enable-generate-man-pages \
 	--enable-gnutls \
@@ -361,11 +364,13 @@ install -d -m 700 %{buildroot}%{rsyslog_statedir}
 install -d -m 700 %{buildroot}%{rsyslog_pkidir}
 install -d -m 755 %{buildroot}%{rsyslog_docdir}/html
 install -d -m 755 %{buildroot}%{_libexecdir}/%{name}
+install -d -m 755 %{buildroot}%{_tmpfilesdir}
 
 install -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/rsyslog.conf
 install -p -m 644 %{SOURCE3} %{buildroot}%{_sysconfdir}/sysconfig/rsyslog
 install -p -m 644 %{SOURCE4} %{buildroot}%{_sysconfdir}/logrotate.d/rsyslog
 install -p -m 644 %{SOURCE5} %{buildroot}%{_unitdir}/rsyslog.service
+install -p -m 644 %{SOURCE7} %{buildroot}%{_tmpfilesdir}/rsyslog.conf
 install -p -m 644 plugins/ommysql/createDB.sql %{buildroot}%{rsyslog_docdir}/mysql-createDB.sql
 install -p -m 644 plugins/ompgsql/createDB.sql %{buildroot}%{rsyslog_docdir}/pgsql-createDB.sql
 dos2unix tools/recover_qi.pl
@@ -410,6 +415,7 @@ done
 %{_mandir}/man5/rsyslog.conf.5.gz
 %{_mandir}/man8/rsyslogd.8.gz
 %{_unitdir}/rsyslog.service
+%{_tmpfilesdir}/rsyslog.conf
 %config(noreplace) %{_sysconfdir}/rsyslog.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/rsyslog
 # plugins
@@ -519,6 +525,23 @@ done
 
 
 %changelog
+* Tue Jul 29 2025 Attila Lakatos <alakatos@redhat.com> 8.2506.0-2
+- imfile: reintroduce deleteStateOnFileMove parameter
+  Resolves: RHEL-92262
+
+* Thu Jun 12 2025 Attila Lakatos <alakatos@redhat.com> - 8.2506.0-1
+- Rebase to 8.2506.0
+- imuxsock: track dropped messages by ratelimiting
+  Resolves: RHEL-66274
+- man page version update
+  Resolves: RHEL-78220
+- omfwd: do not hang forever in case of broken TLS handshake
+  Resolves: RHEL-67639
+
+* Wed May 07 2025 Attila Lakatos <alakatos@redhat.com> - 8.2412.0-2
+- Add tmpfiles.d configuration
+  Resolves: RHEL-89982
+
 * Fri Dec 06 2024 Attila Lakatos <alakatos@redhat.com> - 8.2412.0-1
 - Rebase to 8.2412.0
   Resolves: RHEL-65177
