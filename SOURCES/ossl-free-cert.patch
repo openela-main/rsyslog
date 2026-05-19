@@ -1,0 +1,38 @@
+From e21ea186a88d2750c97092c016811d1378cbe24c Mon Sep 17 00:00:00 2001
+From: Cropi <alakatos@redhat.com>
+Date: Thu, 9 Oct 2025 11:39:46 +0200
+Subject: [PATCH] ossl bugfix: ensure peer cert is freed in osslChkPeerAuth
+
+Ensure osslChkPeerAuth starts with a null peer-certificate pointer and
+frees any retrieved X509 certificate so OpenSSL allocations from
+SSL_get_peer_certificate do not leak after TLS handshakes.
+---
+ runtime/nsd_ossl.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/runtime/nsd_ossl.c b/runtime/nsd_ossl.c
+index 30300156b..954277fef 100644
+--- a/runtime/nsd_ossl.c
++++ b/runtime/nsd_ossl.c
+@@ -353,7 +353,7 @@ finalize_it:
+  */
+ rsRetVal osslChkPeerAuth(nsd_ossl_t *pThis) {
+     DEFiRet;
+-    X509 *certpeer;
++    X509 *certpeer = NULL;
+ 
+     ISOBJ_TYPE_assert(pThis, nsd_ossl);
+     uchar *fromHostIP = NULL;
+@@ -388,6 +388,9 @@ rsRetVal osslChkPeerAuth(nsd_ossl_t *pThis) {
+             break;
+     }
+ finalize_it:
++    if (certpeer != NULL) {
++        X509_free(certpeer);
++    }
+     if (fromHostIP != NULL) {
+         free(fromHostIP);
+     }
+-- 
+2.51.0
+

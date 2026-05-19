@@ -1,27 +1,26 @@
 %define rsyslog_statedir %{_sharedstatedir}/rsyslog
 %define rsyslog_pkidir %{_sysconfdir}/pki/rsyslog
 %define rsyslog_docdir %{_docdir}/rsyslog
-%define qpid_proton_v 0.39.0
+%define qpid_proton_v 0.40.0
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2506.0
+Version: 8.2510.0
 Release: 2%{?dist}
 License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
-Source1: http://www.rsyslog.com/files/download/rsyslog/%{name}-doc-%{version}.tar.gz
-Source2: rsyslog.conf
-Source3: rsyslog.sysconfig
-Source4: rsyslog.log
-Source5: rsyslog.service
+Source1: rsyslog.conf
+Source2: rsyslog.sysconfig
+Source3: rsyslog.log
+Source4: rsyslog.service
 # Add qpid-proton as another source, enable omamqp1 module in a
 # separatae sub-package with it statically linked(see rhbz#1713427)
-Source6: https://archive.apache.org/dist/qpid/proton/%{qpid_proton_v}/qpid-proton-%{qpid_proton_v}.tar.gz
+Source5: https://archive.apache.org/dist/qpid/proton/%{qpid_proton_v}/qpid-proton-%{qpid_proton_v}.tar.gz
 Source7: rsyslog-tmpfiles.conf
 
-Patch0: openssl-disable-engines.patch
-Patch1: imfile-delete-state-on-file-move.patch
+Patch0: ossl-free-cert.patch
+Patch1: gtls-unused-certificates.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -248,18 +247,13 @@ The rsyslog-mmkubernetes package provides module for adding kubernetes
 container metadata.
 
 %prep
-# set up rsyslog-doc sources
-%setup -q -a 1 -T -c
-
-rm -r LICENSE README.md source build/objects.inv
-mv build doc
 # set up rsyslog sources
 %setup -q -D
 %patch -P 0 -p1
 %patch -P 1 -p1
 
 # Unpack qpid-proton for rhel
-%setup -q -D -T -b 6
+%setup -q -D -T -b 5
 
 %build
 # Add additional flags as per https://one.redhat.com/rhel-developer-guide/#_what_are_the_required_flags
@@ -366,10 +360,10 @@ install -d -m 755 %{buildroot}%{rsyslog_docdir}/html
 install -d -m 755 %{buildroot}%{_libexecdir}/%{name}
 install -d -m 755 %{buildroot}%{_tmpfilesdir}
 
-install -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/rsyslog.conf
-install -p -m 644 %{SOURCE3} %{buildroot}%{_sysconfdir}/sysconfig/rsyslog
-install -p -m 644 %{SOURCE4} %{buildroot}%{_sysconfdir}/logrotate.d/rsyslog
-install -p -m 644 %{SOURCE5} %{buildroot}%{_unitdir}/rsyslog.service
+install -p -m 644 %{SOURCE1} %{buildroot}%{_sysconfdir}/rsyslog.conf
+install -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/sysconfig/rsyslog
+install -p -m 644 %{SOURCE3} %{buildroot}%{_sysconfdir}/logrotate.d/rsyslog
+install -p -m 644 %{SOURCE4} %{buildroot}%{_unitdir}/rsyslog.service
 install -p -m 644 %{SOURCE7} %{buildroot}%{_tmpfilesdir}/rsyslog.conf
 install -p -m 644 plugins/ommysql/createDB.sql %{buildroot}%{rsyslog_docdir}/mysql-createDB.sql
 install -p -m 644 plugins/ompgsql/createDB.sql %{buildroot}%{rsyslog_docdir}/pgsql-createDB.sql
@@ -402,7 +396,7 @@ done
 %{!?_licensedir:%global license %%doc}
 %license COPYING*
 %doc AUTHORS ChangeLog README.md
-%{rsyslog_docdir}
+%exclude %{rsyslog_docdir}/recover_qi.pl
 %exclude %{rsyslog_docdir}/html
 %exclude %{rsyslog_docdir}/mysql-createDB.sql
 %exclude %{rsyslog_docdir}/pgsql-createDB.sql
@@ -440,6 +434,7 @@ done
 %{_libdir}/rsyslog/mmanon.so
 %{_libdir}/rsyslog/mmcount.so
 %{_libdir}/rsyslog/mmexternal.so
+%{_libdir}/rsyslog/mmleefparse.so
 %{_libdir}/rsyslog/mmutf8fix.so
 %{_libdir}/rsyslog/omhttp.so
 %{_libdir}/rsyslog/omjournal.so
@@ -462,7 +457,8 @@ done
 %{_libdir}/rsyslog/lmcry_gcry.so
 
 %files doc
-%doc %{rsyslog_docdir}/html
+%{rsyslog_docdir}/html
+%{rsyslog_docdir}/recover_qi.pl
 
 %files elasticsearch
 %{_libdir}/rsyslog/omelasticsearch.so
@@ -525,6 +521,15 @@ done
 
 
 %changelog
+* Fri Oct 31 2025 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-2
+- Rebase to 8.2510.0
+- gnutls netstream driver: improve doc
+  Resolves: RHEL-86031
+- rsyslog.conf: use RainerSscript syntax in actions
+  Resolves: RHEL-42508
+- gnutls netstream driver: report missing certificate just once
+  Resolves: RHEL-105782
+
 * Tue Jul 29 2025 Attila Lakatos <alakatos@redhat.com> 8.2506.0-2
 - imfile: reintroduce deleteStateOnFileMove parameter
   Resolves: RHEL-92262
