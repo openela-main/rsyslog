@@ -1,0 +1,127 @@
+From e3f131d561a1df7dd07631345662ab678614bba7 Mon Sep 17 00:00:00 2001
+From: Cropi <alakatos@redhat.com>
+Date: Mon, 3 Nov 2025 14:13:19 +0100
+Subject: [PATCH 2/2] nsd_gtls: fix repeated warnings on connection retry +
+ test
+
+Move the `loggedWarnings` bitfield from per-instance to module-level
+static storage in `runtime/nsd_gtls.c` so that missing cert/key/CA
+warnings are emitted only once per rsyslogd process, not on every
+connection retry. Otherwise, a broken connection can spam dosens of
+logs.
+---
+ runtime/nsd_gtls.c                   | 26 ++++++++++++++-----------
+ runtime/nsd_gtls.h                   |  1 -
+ tests/omfwd-gtls-missing-cert-key.sh | 29 ++++++++++++++++++++++++++++
+ 3 files changed, 44 insertions(+), 12 deletions(-)
+ create mode 100755 tests/omfwd-gtls-missing-cert-key.sh
+
+diff --git a/runtime/nsd_gtls.c b/runtime/nsd_gtls.c
+index 7721c1bd1..9a7939fba 100644
+--- a/runtime/nsd_gtls.c
++++ b/runtime/nsd_gtls.c
+@@ -77,6 +77,9 @@ static pthread_mutex_t mutGtlsStrerror;
+ 
+ static gnutls_dh_params_t dh_params; /**< server DH parameters for anon mode */
+ 
++/* Module-level bitfield for warnings that have been logged (shared across all instances) */
++static unsigned loggedWarnings = 0;
++
+ /* bitfield for warnings that have been logged */
+ enum {
+     GTLS_LOGGED_WARN_CERT_MISSING = 1 << 0,
+@@ -674,13 +677,14 @@ static rsRetVal gtlsAddOurCert(nsd_gtls_t *const pThis) {
+     keyFile = (pThis->pszKeyFile == NULL) ? glbl.GetDfltNetstrmDrvrKeyFile(runConf) : pThis->pszKeyFile;
+     dbgprintf("GTLS certificate file: '%s'\n", certFile);
+     dbgprintf("GTLS key file: '%s'\n", keyFile);
+-    if (certFile == NULL && !(pThis->loggedWarnings & GTLS_LOGGED_WARN_CERT_MISSING)) {
+-        LogMsg(0, RS_RET_CERT_MISSING, LOG_WARNING, "warning: certificate file is not set");
+-        pThis->loggedWarnings |= GTLS_LOGGED_WARN_CERT_MISSING;
++
++    if (certFile == NULL && !(loggedWarnings & GTLS_LOGGED_WARN_CERT_MISSING)) {
++        LogError(0, RS_RET_CERT_MISSING, "warning: certificate file is not set");
++        loggedWarnings |= GTLS_LOGGED_WARN_CERT_MISSING;
+     }
+-    if (keyFile == NULL && !(pThis->loggedWarnings & GTLS_LOGGED_WARN_KEY_MISSING)) {
+-        LogMsg(0, RS_RET_CERTKEY_MISSING, LOG_WARNING, "warning: key file is not set");
+-        pThis->loggedWarnings |= GTLS_LOGGED_WARN_KEY_MISSING;
++    if (keyFile == NULL && !(loggedWarnings & GTLS_LOGGED_WARN_KEY_MISSING)) {
++        LogError(0, RS_RET_CERTKEY_MISSING, "warning: key file is not set");
++        loggedWarnings |= GTLS_LOGGED_WARN_KEY_MISSING;
+     }
+ 
+     /* set certificate in gnutls */
+@@ -757,10 +761,11 @@ static rsRetVal gtlsInitCred(nsd_gtls_t *const pThis) {
+ 
+     /* sets the trusted cas file */
+     cafile = (pThis->pszCAFile == NULL) ? glbl.GetDfltNetstrmDrvrCAF(runConf) : pThis->pszCAFile;
+-    if (cafile == NULL && !(pThis->loggedWarnings & GTLS_LOGGED_WARN_CA_MISSING)) {
+-        LogMsg(0, RS_RET_CA_CERT_MISSING, LOG_WARNING, "Warning: CA certificate is not set");
+-        pThis->loggedWarnings |= GTLS_LOGGED_WARN_CA_MISSING;
+-    } else {
++    if (cafile == NULL && !(loggedWarnings & GTLS_LOGGED_WARN_CA_MISSING)) {
++        LogError(0, RS_RET_CA_CERT_MISSING, "Warning: CA certificate is not set");
++        loggedWarnings |= GTLS_LOGGED_WARN_CA_MISSING;
++    }
++    if (cafile != NULL) {
+         dbgprintf("GTLS CA file: '%s'\n", cafile);
+         gnuRet = gnutls_certificate_set_x509_trust_file(pThis->xcred, (char *)cafile, GNUTLS_X509_FMT_PEM);
+         if (gnuRet == GNUTLS_E_FILE_ERROR) {
+@@ -1432,7 +1437,6 @@ static inline void gtlsSetTransportPtr(nsd_gtls_t *pThis, int sock) {
+ BEGINobjConstruct(nsd_gtls) /* be sure to specify the object type also in END macro! */
+     iRet = nsd_ptcp.Construct(&pThis->pTcp);
+     pThis->bReportAuthErr = 1;
+-    pThis->loggedWarnings = 0;
+ ENDobjConstruct(nsd_gtls)
+ 
+ 
+diff --git a/runtime/nsd_gtls.h b/runtime/nsd_gtls.h
+index 685f65a49..f40ab3f13 100644
+--- a/runtime/nsd_gtls.h
++++ b/runtime/nsd_gtls.h
+@@ -83,7 +83,6 @@ struct nsd_gtls_s {
+         gnutls_x509_privkey_t ourKey; /**< our private key, if in client mode (unused in server mode) */
+         short bOurCertIsInit; /**< 1 if our certificate is initialized and must be deinit on destruction */
+         short bOurKeyIsInit; /**< 1 if our private key is initialized and must be deinit on destruction */
+-        unsigned short loggedWarnings; /**< bitfield of logged warnings */
+         char *pszRcvBuf;
+         int lenRcvBuf;
+         /**< -1: empty, 0: connection closed, 1..NSD_GTLS_MAX_RCVBUF-1: data of that size present */
+diff --git a/tests/omfwd-gtls-missing-cert-key.sh b/tests/omfwd-gtls-missing-cert-key.sh
+new file mode 100755
+index 000000000..36cb2f3f5
+--- /dev/null
++++ b/tests/omfwd-gtls-missing-cert-key.sh
+@@ -0,0 +1,29 @@
++#!/bin/bash
++# Test for gnutls loggedWarnings functionality with omfwd
++# This test verifies that warnings for missing cert/key files are logged only once
++# even when the action retries multiple times (loggedWarnings mechanism)
++. ${srcdir:=.}/diag.sh init
++
++export PORT_RCVR="$(get_free_port)"
++export RS_REDIR=">${RSYSLOG_DYNNAME}.rsyslog.log 2>&1"
++
++generate_conf
++add_conf '
++global(defaultNetstreamDriverCAFile="'$srcdir/tls-certs/ca.pem'")
++
++action(type="omfwd" protocol="tcp" target="127.0.0.1" port="'$PORT_RCVR'"
++	StreamDriver="gtls"
++	StreamDriverMode="1"
++	StreamDriverAuthMode="x509/name"
++	action.resumeRetryCount="-1"
++	action.resumeInterval="10")
++'
++startup
++sleep 30
++shutdown_immediate
++wait_shutdown
++
++content_count_check "warning: certificate file is not set" 1 ${RSYSLOG_DYNNAME}.rsyslog.log
++content_count_check "warning: key file is not set" 1 ${RSYSLOG_DYNNAME}.rsyslog.log
++
++exit_test
+-- 
+2.51.0
+
