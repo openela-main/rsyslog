@@ -37,7 +37,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2510.0
-Release: 5%{?dist}
+Release: 5%{?dist}.1
 License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -71,6 +71,7 @@ BuildRequires: libcap-ng-devel
 
 Patch0: ossl-free-cert.patch
 Patch1: gtls-unused-certificates.patch
+Patch2: imptcp-guard-iCurrLine-before-regex-match.patch
 
 Recommends: logrotate
 Obsoletes: rsyslog-logrotate < 8.2310.0-2
@@ -383,6 +384,7 @@ This module allows rsyslog to send messages to a RabbitMQ server.
 
 %patch -P 0 -p1
 %patch -P 1 -p1
+%patch -P 2 -p1
 
 %if %{with omamqp1}
 # Unpack qpid-proton
@@ -769,6 +771,10 @@ done
 
 
 %changelog
+* Tue Jul 21 2026 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-5.1
+- Backport: guard regex-framing match against iCurrLine == 0 to fix crash
+  Resolves: RHEL-212700
+
 * Mon Oct 20 2025 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-5
 - Rebase to 8.2510.0
 - gnutls netstream driver: improve doc

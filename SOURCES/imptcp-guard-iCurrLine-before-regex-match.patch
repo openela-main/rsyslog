@@ -1,0 +1,36 @@
+From ef8f1d90acedbf443eb3c152e67dcafb5d2149ec Mon Sep 17 00:00:00 2001
+From: Cropi <alakatos@redhat.com>
+Date: Tue, 21 Jul 2026 14:29:06 +0200
+Subject: [PATCH] imptcp: guard regex-framing match against iCurrLine == 0
+
+When the 2*iMaxLine-th byte processed is '\n', the oversize handler resets
+iMsg=0 and iCurrLine=1, then the '\n' branch sets iCurrLine=iMsg=0.  The
+very next byte that matches the start regex computes iMsg = iCurrLine - 1
+= -1, which is passed as size_t to MsgSetRawMsg yielding SIZE_MAX and
+crashing rsyslogd (SIGABRT on assert, SIGSEGV on memcpy without it).
+
+Add the missing iCurrLine > 0 guard before the regex match branch,
+mirroring the reference implementation in tcps_sess.c.  With this
+guard iMsg = iCurrLine - 1 is only reached when iCurrLine >= 1, so the
+result is always non-negative.
+
+Signed-off-by: Cropi <alakatos@redhat.com>
+---
+ plugins/imptcp/imptcp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plugins/imptcp/imptcp.c b/plugins/imptcp/imptcp.c
+index aabbcc..ddeeff 100644
+--- a/plugins/imptcp/imptcp.c
++++ b/plugins/imptcp/imptcp.c
+@@ -1009,7 +1009,7 @@
+         pThis->iCurrLine = pThis->iMsg;
+     } else {
+         const int isMatch = !regexec(&inst->start_preg, (char *)pThis->pMsg + pThis->iCurrLine, 0, NULL, 0);
+-        if (isMatch) {
++        if (pThis->iCurrLine > 0 && isMatch) {
+             DBGPRINTF("regex match (%d), framing line: %s\n", pThis->iCurrLine, pThis->pMsg);
+             strcpy((char *)pThis->pMsg_save, (char *)pThis->pMsg + pThis->iCurrLine);
+             pThis->iMsg = pThis->iCurrLine - 1;
+-- 
+2.55.0
