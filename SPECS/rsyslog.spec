@@ -6,7 +6,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2102.0
-Release: 15%{?dist}.1
+Release: 15%{?dist}.3
 License: (GPLv3+ and ASL 2.0)
 Group: System Environment/Daemons
 ExcludeArch: i686
@@ -77,6 +77,9 @@ Patch25: rsyslog-8.2102.0-rhbz2192955-es-5.patch
 Patch26: rsyslog-8.2102.0-rhbz2192955-es-6.patch
 Patch27: rsyslog-8.2102.0-rhbz2192955-es-doc.patch
 Patch28: propagate-gnutlsPriorityString.patch
+Patch29: RHEL-212704-imptcp-guard-iCurrLine-before-regex-match.patch
+# Upstream commit: https://github.com/rsyslog/rsyslog/commit/667e3f61aec5ee02c5c2ee6f0f8accf6fe4301a9
+Patch30: rainerscript-fix-replace-sizing-rewind.patch
 
 %package crypto
 Summary: Encryption support
@@ -329,6 +332,8 @@ mv build doc
 %patch -P 26 -p1
 %patch -P 27 -p1
 %patch -P 28 -p1
+%patch -P 29 -p1
+%patch -P 30 -p1
 
 %build
 %ifarch sparc64
@@ -573,6 +578,14 @@ done
 %{_libdir}/rsyslog/omudpspoof.so
 
 %changelog
+* Wed Sep 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15.3
+- Fix CVE-2026-78002: heap buffer overflow in RainerScript replace() function
+  Resolves: RHEL-246632
+
+* Mon Aug 03 2026 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15.2
+- Backport: imptcp: guard regex-framing match against iCurrLine == 0
+  Resolves: RHEL-212704
+
 * Mon Aug 26 2024 Attila Lakatos <alakatos@redhat.com> - 8.2102.0-15.1
 - Propagate gnutlsPriorityString when accepting new connection
   resolves: RHEL-54663

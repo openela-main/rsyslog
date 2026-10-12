@@ -1,0 +1,13 @@
+--- a/grammar/rainerscript.c	2026-09-09 13:45:47.334015912 +0200
++++ b/grammar/rainerscript.c	2026-09-09 13:45:47.337874269 +0200
+@@ -1740,8 +1740,8 @@
+ 		if (src_buff[i] == find[j]) {
+ 			j++;
+ 		} else if (j > 0) {
+-			i -= (j - 1);
+-			lDst -= (j - 1);
++			i -= j;
++			lDst -= j;
+ 			j = 0;
+ 		}
+ 	}
