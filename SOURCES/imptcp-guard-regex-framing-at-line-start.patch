@@ -1,0 +1,11 @@
+--- rsyslog-8.2604.0/plugins/imptcp/imptcp.c	2026-04-20 11:25:09.423912802 +0200
++++ rsyslog-8.2604.0-patched/plugins/imptcp/imptcp.c	2026-08-11 08:12:25.841724364 +0200
+@@ -1020,7 +1020,7 @@ static rsRetVal ATTR_NONNULL() processDa
+         pThis->iCurrLine = pThis->iMsg;
+     } else {
+         const int isMatch = !regexec(&inst->start_preg, (char *)pThis->pMsg + pThis->iCurrLine, 0, NULL, 0);
+-        if (isMatch) {
++        if (pThis->iCurrLine > 0 && isMatch) {
+             DBGPRINTF("regex match (%d), framing line: %s\n", pThis->iCurrLine, pThis->pMsg);
+             strcpy((char *)pThis->pMsg_save, (char *)pThis->pMsg + pThis->iCurrLine);
+             pThis->iMsg = pThis->iCurrLine - 1;

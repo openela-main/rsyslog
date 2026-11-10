@@ -1,0 +1,26 @@
+From fc4fc65dcbe084a0002332f4a37be0a4ab7d712c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Renaud=20M=C3=A9trich?= <rmetrich@redhat.com>
+Date: Wed, 8 Jul 2026 15:51:33 +0200
+Subject: [PATCH] imjournal: warn when failing to get the MESSAGE field
+
+---
+ plugins/imjournal/imjournal.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/plugins/imjournal/imjournal.c b/plugins/imjournal/imjournal.c
+index edd46c56a9..f7e139e5a8 100644
+--- a/plugins/imjournal/imjournal.c
++++ b/plugins/imjournal/imjournal.c
+@@ -598,7 +598,11 @@ static rsRetVal readjournal(struct journalContext_s *journalContext, ruleset_t *
+     int facility = cs.iDfltFacility;
+ 
+     /* Get message text */
+-    if (journalGetData(journalContext, "MESSAGE", &get, &length) < 0) {
++    r = journalGetData(journalContext, "MESSAGE", &get, &length);
++    if (r < 0) {
++        LogMsg(-r, RS_RET_OK_WARN, LOG_WARNING,
++               "imjournal: failed to retrieve 'MESSAGE' field from journal entry "
++               ", submitting empty message");
+         CHKmalloc(message = strdup(""));
+     } else {
+         CHKiRet(sanitizeValue(((const char *)get) + 8, length - 8, &message));

@@ -1,0 +1,172 @@
+From 600553721413e8981383b73138b8a086ad7dfba7 Mon Sep 17 00:00:00 2001
+From: Cropi <alakatos@redhat.com>
+Date: Thu, 23 Apr 2026 10:35:22 +0200
+Subject: [PATCH] imfile: release deleted-file FDs after FILE_DELETE_DELAY in
+ inotify mode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In inotify mode, when a monitored file is deleted and no further
+inotify events arrive, poll() blocks indefinitely and the deleted
+file's FD is never closed — the disk space is never reclaimed.
+
+Cap poll() timeout to FILE_DELETE_DELAY+1 s whenever deletions are
+pending, and run a tree walk on that timeout to clean up stale FDs.
+---
+ plugins/imfile/imfile.c                      | 30 +++++++++++
+ tests/Makefile.am                            |  1 +
+ tests/imfile-inotify-fd-release-on-delete.sh | 56 ++++++++++++++++++++
+ 3 files changed, 87 insertions(+)
+ create mode 100755 tests/imfile-inotify-fd-release-on-delete.sh
+
+diff --git a/plugins/imfile/imfile.c b/plugins/imfile/imfile.c
+index d9c754811e..a60813a2ab 100644
+--- a/plugins/imfile/imfile.c
++++ b/plugins/imfile/imfile.c
+@@ -106,6 +106,7 @@ DEF_IMOD_STATIC_DATA /* must be present, starts static data */
+                                   const size_t outlen); /* see siphash.c */
+ 
+ static int bLegacyCnfModGlobalsPermitted; /* are legacy module-global config parameters permitted? */
++static sbool havePendingDeletes = 0; /* set when files await deferred deletion after FILE_DELETE_DELAY */
+ 
+ #define NUM_MULTISUB 1024 /* default max number of submits */
+ #define DFLT_PollInterval 10
+@@ -970,6 +971,7 @@ static void detect_updates(fs_edge_t *const edge) {
+                         "detect_updates obj gone away, keep '%s' "
+                         "open: %" PRId64 "/%" PRId64 "/%" PRId64 "s!\n",
+                         act_name, (int64_t)act->time_to_delete, (int64_t)ttNow, (int64_t)ttNow - act->time_to_delete);
++                    havePendingDeletes = 1;
+                     pollFile(act);
+                 }
+                 break;
+@@ -2649,6 +2651,7 @@ static rsRetVal do_inotify(void) {
+     int currev;
+     static int last_timeout = 0;
+     time_t last_fallback = 0;
++    time_t last_delete_check = 0;
+     struct pollfd pollfd;
+     DEFiRet;
+ 
+@@ -2684,6 +2687,14 @@ static rsRetVal do_inotify(void) {
+                 poll_timeout = fallback_timeout;
+             }
+         }
++        /* Cap poll() so we wake up to clean up deleted-file FDs even
++         * when no inotify events arrive. */
++        if (havePendingDeletes) {
++            const int delete_timeout = (FILE_DELETE_DELAY + 1) * 1000;
++            if (poll_timeout == -1 || delete_timeout < poll_timeout) {
++                poll_timeout = delete_timeout;
++            }
++        }
+         r = poll(&pollfd, 1, poll_timeout);
+ 
+         if (r == -1 && errno == EINTR) {
+@@ -2703,6 +2714,14 @@ static rsRetVal do_inotify(void) {
+                     last_fallback = now;
+                 }
+             }
++            /* poll() timed out — re-check deleted files whose
++             * FILE_DELETE_DELAY has now elapsed. */
++            if (havePendingDeletes) {
++                DBGPRINTF("pending deletes exist, running tree walk to re-check\n");
++                havePendingDeletes = 0;
++                fs_node_walk(runModConf->conf_tree, poll_tree);
++                last_delete_check = time(NULL);
++            }
+             continue;
+         } else if (r == -1) {
+             LogError(errno, RS_RET_INTERNAL_ERROR, "%s:%d: unexpected error during poll timeout wait", __FILE__,
+@@ -2730,6 +2749,17 @@ static rsRetVal do_inotify(void) {
+                     last_fallback = now;
+                 }
+             }
++            /* Under sustained event load poll() never times out, so
++             * also check here, rate-limited to once per FILE_DELETE_DELAY. */
++            if (havePendingDeletes) {
++                time_t now = time(NULL);
++                if (last_delete_check == 0 || last_delete_check + FILE_DELETE_DELAY + 1 <= now) {
++                    DBGPRINTF("pending deletes exist (event path), running tree walk to re-check\n");
++                    havePendingDeletes = 0;
++                    fs_node_walk(runModConf->conf_tree, poll_tree);
++                    last_delete_check = now;
++                }
++            }
+             rd = read(ino_fd, iobuf, sizeof(iobuf));
+             if (rd == -1 && errno == EINTR) {
+                 /* This might have been our termination signal! */
+diff --git a/tests/Makefile.am b/tests/Makefile.am
+index 63fb091703..3302c614ef 100644
+--- a/tests/Makefile.am
++++ b/tests/Makefile.am
+@@ -1681,6 +1681,7 @@ TESTS_IMFILE = \
+ 	imfile-rename.sh \
+ 	imfile-symlink.sh \
+ 	imfile-symlink-multi.sh \
++	imfile-inotify-fd-release-on-delete.sh \
+ 	imfile-symlink-ext-tmp-dir-tree.sh \
+ 	imfile-logrotate.sh \
+ 	imfile-logrotate-async.sh \
+diff --git a/tests/imfile-inotify-fd-release-on-delete.sh b/tests/imfile-inotify-fd-release-on-delete.sh
+new file mode 100755
+index 0000000000..d71905724f
+--- /dev/null
++++ b/tests/imfile-inotify-fd-release-on-delete.sh
+@@ -0,0 +1,56 @@
++#!/bin/bash
++# Test that imfile in inotify mode releases FDs of deleted files
++# after FILE_DELETE_DELAY without requiring any additional inotify
++# events. When no new events arrive after a file is deleted, poll()
++# blocks indefinitely and the FD is never closed, leaking disk space.
++# This is part of the rsyslog testbench, licensed under ASL 2.0
++. "${srcdir:=.}"/diag.sh init
++. "$srcdir"/diag.sh check-inotify-only
++
++export TESTMESSAGES=100
++export RETRIES=50
++
++generate_conf
++add_conf '
++global(workDirectory="'${RSYSLOG_DYNNAME}'.spool")
++module(load="../plugins/imfile/.libs/imfile" mode="inotify")
++input(type="imfile" tag="file:" file="./'$RSYSLOG_DYNNAME'.input")
++
++template(name="outfmt" type="string" string="%msg:F,58:2%\n")
++if $msg contains "msgnum:" then
++	action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="outfmt")
++'
++
++./inputfilegen -m $TESTMESSAGES > "$RSYSLOG_DYNNAME".input
++startup
++wait_file_lines "$RSYSLOG_OUT_LOG" $TESTMESSAGES $RETRIES
++
++PID=$(cat "$RSYSLOG_PIDBASE".pid)
++if [ -z "$PID" ]; then
++	printf 'FAIL: could not read rsyslog PID\n'
++	error_exit 1
++fi
++check_fd_for_pid "$PID" exists ".input"
++
++rm "$RSYSLOG_DYNNAME".input
++
++# Wait for rsyslog to release the FD on its own — no new files, no
++# trigger events.  FILE_DELETE_DELAY is 5 s, the fix caps poll() at
++# FILE_DELETE_DELAY+1 s, so 20 s is more than enough.
++max_wait=20
++i=0
++while ! check_fd_for_pid "$PID" absent ".input (deleted)"; do
++	if [ "$i" -ge "$max_wait" ]; then
++		printf 'FAIL: rsyslog did not release FD for deleted file after %d s\n' "$max_wait"
++		find /proc/"$PID"/fd/ -lname '*deleted*' -ls 2>/dev/null
++		error_exit 1
++	fi
++	./msleep 1000
++	((i++))
++done
++printf 'PASS: FD released after %d s\n' "$i"
++
++shutdown_when_empty
++wait_shutdown
++seq_check 0 $(( TESTMESSAGES - 1 ))
++exit_test

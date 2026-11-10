@@ -5,8 +5,8 @@
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2510.0
-Release: 2%{?dist}.2
+Version: 8.2604.0
+Release: 4%{?dist}
 License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -19,11 +19,11 @@ Source4: rsyslog.service
 Source5: https://archive.apache.org/dist/qpid/proton/%{qpid_proton_v}/qpid-proton-%{qpid_proton_v}.tar.gz
 Source7: rsyslog-tmpfiles.conf
 
-Patch0: ossl-free-cert.patch
-Patch1: gtls-unused-certificates.patch
-Patch2: imptcp-guard-iCurrLine-before-regex-match.patch
-# Upstream commit: https://github.com/rsyslog/rsyslog/commit/667e3f61aec5ee02c5c2ee6f0f8accf6fe4301a9
-Patch3: rainerscript-fix-replace-sizing-rewind.patch
+Patch0: imfile-inotify-fd-release-on-delete.patch
+Patch1: omelasticsearch-pqc-tls.patch
+Patch2: omelasticsearch-apply-tls-opts-during-detection.patch
+Patch3: imjournal-warn-on-missing-MESSAGE-field.patch
+Patch4: imptcp-guard-regex-framing-at-line-start.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -46,17 +46,14 @@ BuildRequires: libcap-ng-devel
 
 Conflicts: selinux-policy < 38.1.29-1
 
-Recommends: %{name}-logrotate = %version-%release
+Recommends: logrotate
+Obsoletes: rsyslog-logrotate < 8.2604.0-1
+Provides: rsyslog-logrotate = %{version}-%{release}
 Requires: bash >= 2.0
 %{?systemd_ordering}
 
 Provides: syslog
 Obsoletes: sysklogd < 1.5-11
-
-%package logrotate
-Summary: Log rotation for rsyslog
-Requires: %name = %version-%release
-Requires: logrotate >= 3.5.2
 
 %package crypto
 Summary: Encryption support
@@ -165,9 +162,6 @@ and can be used as a drop-in replacement. Rsyslog is simple to set up, with
 advanced features suitable for enterprise-class, encryption-protected syslog
 relay chains.
 
-%description logrotate
-This subpackage contains the default logrotate configuration for rsyslog.
-
 %description crypto
 This package contains a module providing log file encryption and a
 command line tool to process encrypted logs.
@@ -256,6 +250,7 @@ container metadata.
 %patch -P 1 -p1
 %patch -P 2 -p1
 %patch -P 3 -p1
+%patch -P 4 -p1
 
 # Unpack qpid-proton for rhel
 %setup -q -D -T -b 5
@@ -345,7 +340,8 @@ autoreconf -if
 	--enable-snmp \
 	--enable-unlimited-select \
 	--enable-usertools \
-	--enable-omkafka
+	--enable-omkafka \
+	--disable-impstats-push
 
 make V=1
 
@@ -382,6 +378,8 @@ rm -f %{buildroot}%{_libdir}/rsyslog/*.la
 # imdiag and liboverride is only used for testing
 rm -f %{buildroot}%{_libdir}/rsyslog/imdiag.so
 rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_gethostname.so
+rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_getaddrinfo.so
+rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_gethostname_nonfqdn.so
 
 %post
 for n in /var/log/{messages,secure,maillog,spooler}
@@ -417,6 +415,7 @@ done
 %{_tmpfilesdir}/rsyslog.conf
 %config(noreplace) %{_sysconfdir}/rsyslog.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/rsyslog
+%config(noreplace) %{_sysconfdir}/logrotate.d/rsyslog
 # plugins
 %{_libdir}/rsyslog/fmhash.so
 %{_libdir}/rsyslog/fmhttp.so
@@ -452,9 +451,6 @@ done
 %{_libdir}/rsyslog/pmcisconames.so
 %{_libdir}/rsyslog/pmlastmsg.so
 %{_libdir}/rsyslog/pmsnare.so
-
-%files logrotate
-%config(noreplace) %{_sysconfdir}/logrotate.d/rsyslog
 
 %files crypto
 %{_bindir}/rscryutil
@@ -526,13 +522,33 @@ done
 
 
 %changelog
-* Wed Sep 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-2.2
-- Fix CVE-2026-78002: heap buffer overflow in RainerScript replace() function
-  Resolves: RHEL-246641
+* Tue Aug 11 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-4
+- Backport: imptcp: guard regex framing match at line start
+  Resolves: RHEL-212706
 
-* Wed Jul 22 2026 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-2.1
-- Backport: imptcp: guard regex-framing match against iCurrLine == 0
-  Resolves: RHEL-212699
+* Mon Jul 13 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-3
+- Backport: warn when imjournal fails to retrieve MESSAGE field from journal entry
+  Resolves: RHEL-194529
+
+* Thu Jul 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-2
+- Backport omelasticsearch PQC TLS parameters (tls.tlsversion, tls.ciphersuites,
+  tls.keyexchangegroups) and apply them during startup version detection
+  Resolves: RHEL-193506
+
+* Wed Apr 29 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-1
+- Rebase to 8.2604.0
+  Resolves: RHEL-140914
+- Drop ossl-free-cert.patch (upstream)
+- Drop gtls-unused-certificates.patch (upstream)
+- Add SAN:IP validation support
+  Resolves: RHEL-169794
+- Fix omelasticsearch IPv6 handling
+  Resolves: RHEL-169492
+- Fix imfile not releasing deleted file FDs in inotify mode
+  Resolves: RHEL-171897
+- Move logrotate configuration back to the main package
+  Resolves: RHEL-173192
+
 * Fri Oct 31 2025 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-2
 - Rebase to 8.2510.0
 - gnutls netstream driver: improve doc
