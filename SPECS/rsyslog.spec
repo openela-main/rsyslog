@@ -3,7 +3,7 @@
 %define rsyslog_docdir %{_docdir}/rsyslog
 %define qpid_proton_v 0.40.0
 # The following packages are not enabled on rhel:
-#   hiredis, libdbi, mongodb, rabbitmq
+#   hiredis, libdbi, mongodb, rabbitmq, impstats_push
 # The omamqp1 plugin is built differently as qpid-proton is not available on rhel
 %if 0%{?rhel}
 %bcond_with hiredis
@@ -11,11 +11,13 @@
 %bcond_with mongodb
 %bcond_with rabbitmq
 %bcond_with mmtaghostname
+%bcond_with impstats_push
 %else
 %bcond_without hiredis
 %bcond_without libdbi
 %bcond_without mongodb
 %bcond_without rabbitmq
+%bcond_without impstats_push
 %endif
 
 # Add options to not build with features listed below,
@@ -36,8 +38,8 @@
 
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
-Version: 8.2510.0
-Release: 5%{?dist}.2
+Version: 8.2604.0
+Release: 5%{?dist}
 License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -49,6 +51,12 @@ Source4: rsyslog.service
 # separatae sub-package with it statically linked(see rhbz#1713427)
 Source5: https://archive.apache.org/dist/qpid/proton/%{qpid_proton_v}/qpid-proton-%{qpid_proton_v}.tar.gz
 Source7: rsyslog-tmpfiles.conf
+
+Patch0: imfile-inotify-fd-release-on-delete.patch
+Patch1: omelasticsearch-pqc-tls.patch
+Patch2: omelasticsearch-apply-tls-opts-during-detection.patch
+Patch3: imjournal-warn-on-missing-MESSAGE-field.patch
+Patch4: imptcp-guard-regex-framing-at-line-start.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -69,11 +77,11 @@ BuildRequires: systemd-rpm-macros
 BuildRequires: zlib-devel
 BuildRequires: libcap-ng-devel
 
-Patch0: ossl-free-cert.patch
-Patch1: gtls-unused-certificates.patch
-Patch2: imptcp-guard-iCurrLine-before-regex-match.patch
-# Upstream commit: https://github.com/rsyslog/rsyslog/commit/667e3f61aec5ee02c5c2ee6f0f8accf6fe4301a9
-Patch3: rainerscript-fix-replace-sizing-rewind.patch
+%if %{with impstats_push}
+BuildRequires: protobuf-c-compiler
+BuildRequires: protobuf-c-devel
+BuildRequires: snappy-devel
+%endif
 
 Recommends: logrotate
 Obsoletes: rsyslog-logrotate < 8.2310.0-2
@@ -383,11 +391,12 @@ This module allows rsyslog to send messages to a RabbitMQ server.
 %prep
 # set up rsyslog sources
 %setup -q -D
+%patch -P0 -p1
+%patch -P1 -p1
+%patch -P2 -p1
+%patch -P3 -p1
+%patch -P4 -p1
 
-%patch -P 0 -p1
-%patch -P 1 -p1
-%patch -P 2 -p1
-%patch -P 3 -p1
 
 %if %{with omamqp1}
 # Unpack qpid-proton
@@ -418,7 +427,8 @@ export CFLAGS="$RPM_OPT_FLAGS -fpic"
 		-DPython_FIND_STRATEGY=LOCATION \
 		-DPython_ROOT_DIR=/usr \
 		-DCMAKE_AR="/usr/bin/gcc-ar" -DCMAKE_NM="/usr/bin/gcc-nm" -DCMAKE_RANLIB="/usr/bin/gcc-ranlib"
-	make -j8
+	make generated_c_files
+	make %{?_smp_mflags}
 )
 %endif
 
@@ -486,6 +496,11 @@ autoreconf -if
 	--enable-omkafka \
 %endif
 	--enable-impstats \
+%if %{with impstats_push}
+	--enable-impstats-push \
+%else
+	--disable-impstats-push \
+%endif
 	--enable-imptcp \
 	--enable-mail \
 	--enable-mmanon \
@@ -572,6 +587,8 @@ rm -f %{buildroot}%{_libdir}/rsyslog/*.la
 # imdiag and liboverride is only used for testing
 rm -f %{buildroot}%{_libdir}/rsyslog/imdiag.so
 rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_gethostname.so
+rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_getaddrinfo.so
+rm -f %{buildroot}%{_libdir}/rsyslog/liboverride_gethostname_nonfqdn.so
 
 %post
 for n in /var/log/{messages,secure,maillog,spooler}
@@ -774,13 +791,36 @@ done
 
 
 %changelog
-* Wed Sep 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-5.2
-- Fix CVE-2026-78002: heap buffer overflow in RainerScript replace() function
-  Resolves: RHEL-246633
+* Tue Aug 11 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-5
+- Backport: imptcp: guard regex framing match at line start
+  Resolves: RHEL-212698
 
-* Tue Jul 21 2026 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-5.1
-- Backport: guard regex-framing match against iCurrLine == 0 to fix crash
-  Resolves: RHEL-212700
+* Mon Jul 13 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-4
+- Backport: warn when imjournal fails to retrieve MESSAGE field from journal entry
+  Resolves: RHEL-193508
+
+* Thu Jul 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-3
+- Backport omelasticsearch PQC TLS parameters (tls.tlsversion, tls.ciphersuites,
+<<<<<<< HEAD
+  tls.keyexchangegroups)
+=======
+  tls.keyexchangegroups) and apply them during startup version detection
+>>>>>>> dad7741 (omelasticsearch: apply TLS options during startup detection)
+  Resolves: RHEL-193505
+
+* Wed Apr 29 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-2
+- Rebase to 8.2604.0
+  Resolves: RHEL-140910
+- Drop ossl-free-cert.patch (upstream)
+- Drop gtls-unused-certificates.patch (upstream)
+- Add SAN:IP validation support
+  Resolves: RHEL-150376
+- Add TlsRevocationCheck support
+  Resolves: RHEL-151324
+- Fix omelasticsearch IPv6 handling
+  Resolves: RHEL-164768
+- Fix imfile not releasing deleted file FDs in inotify mode
+  Resolves: RHEL-149118
 
 * Mon Oct 20 2025 Attila Lakatos <alakatos@redhat.com> - 8.2510.0-5
 - Rebase to 8.2510.0
