@@ -39,7 +39,7 @@
 Summary: Enhanced system logging and kernel message trapping daemon
 Name: rsyslog
 Version: 8.2604.0
-Release: 5%{?dist}
+Release: 5%{?dist}.1
 License: GPL-3.0-or-later AND Apache-2.0
 URL: http://www.rsyslog.com/
 Source0: http://www.rsyslog.com/files/download/rsyslog/%{name}-%{version}.tar.gz
@@ -57,6 +57,8 @@ Patch1: omelasticsearch-pqc-tls.patch
 Patch2: omelasticsearch-apply-tls-opts-during-detection.patch
 Patch3: imjournal-warn-on-missing-MESSAGE-field.patch
 Patch4: imptcp-guard-regex-framing-at-line-start.patch
+# Upstream commit: https://github.com/rsyslog/rsyslog/commit/667e3f61aec5ee02c5c2ee6f0f8accf6fe4301a9
+Patch5: rainerscript-fix-replace-sizing-rewind.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -396,6 +398,7 @@ This module allows rsyslog to send messages to a RabbitMQ server.
 %patch -P2 -p1
 %patch -P3 -p1
 %patch -P4 -p1
+%patch -P5 -p1
 
 
 %if %{with omamqp1}
@@ -791,6 +794,10 @@ done
 
 
 %changelog
+* Wed Sep 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-5.1
+- Fix CVE-2026-78002: heap buffer overflow in RainerScript replace() function
+  Resolves: RHEL-246636
+
 * Tue Aug 11 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-5
 - Backport: imptcp: guard regex framing match at line start
   Resolves: RHEL-212698
@@ -801,11 +808,7 @@ done
 
 * Thu Jul 09 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-3
 - Backport omelasticsearch PQC TLS parameters (tls.tlsversion, tls.ciphersuites,
-<<<<<<< HEAD
-  tls.keyexchangegroups)
-=======
   tls.keyexchangegroups) and apply them during startup version detection
->>>>>>> dad7741 (omelasticsearch: apply TLS options during startup detection)
   Resolves: RHEL-193505
 
 * Wed Apr 29 2026 Attila Lakatos <alakatos@redhat.com> - 8.2604.0-2
